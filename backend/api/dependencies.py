@@ -6,6 +6,7 @@ from backend.infrastructure.yolo_model import YoloModel
 from backend.services.alert_service import AlertService
 from backend.services.detection_service import DetectionService
 from backend.services.risk_analysis_service import RiskAnalysisService
+from backend.services.stream_processing_service import StreamProcessingService
 
 
 @lru_cache(maxsize=1)
@@ -25,3 +26,15 @@ def get_risk_analysis_service() -> RiskAnalysisService:
 
 def get_alert_service() -> AlertService:
     return AlertService()
+
+
+def get_stream_processing_service(
+    detection_service: DetectionService = Depends(get_detection_service),
+    risk_analysis_service: RiskAnalysisService = Depends(get_risk_analysis_service),
+    alert_service: AlertService = Depends(get_alert_service),
+) -> StreamProcessingService:
+    return StreamProcessingService(
+        detection_service=detection_service,
+        risk_analysis_service=risk_analysis_service,
+        alert_service=alert_service,
+    )

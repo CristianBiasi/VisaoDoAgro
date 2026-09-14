@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from backend.api.routes.detection import router as detection_router
+from backend.api.routes.stream import router as stream_router
 
 app = FastAPI(
     title="VisaoDoAgro API",
@@ -9,6 +10,7 @@ app = FastAPI(
 )
 
 app.include_router(detection_router)
+app.include_router(stream_router)
 
 
 @app.get("/health")
