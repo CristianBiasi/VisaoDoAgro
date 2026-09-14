@@ -5,3 +5,4 @@ opencv-python
 pydantic
 pydantic-settings
 pytest
+python-multipart

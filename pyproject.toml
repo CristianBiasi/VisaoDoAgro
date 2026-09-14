@@ -12,6 +12,7 @@ dependencies = [
     "opencv-python>=5.0.0.93",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.20",
     "pytest>=9.1.1",
     "ultralytics>=8.4.152",
     "uvicorn>=0.53.0",
