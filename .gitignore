@@ -23,6 +23,9 @@ coverage.xml
 .pyre/
 .mypy_cache/
 .ruff_cache/
+*.db
+*.sqlite
+*.sqlite3
 
 # Packaging and build artifacts
 build/
