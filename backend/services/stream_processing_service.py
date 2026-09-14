@@ -3,6 +3,7 @@ import time
 from dataclasses import asdict, dataclass
 
 from backend.infrastructure.video_source import VideoSource
+from backend.infrastructure.notifier import Notifier
 from backend.services.alert_service import AlertService
 from backend.services.detection_service import DetectionService
 from backend.services.risk_analysis_service import RiskAnalysisService
@@ -27,10 +28,12 @@ class StreamProcessingService:
         detection_service: DetectionService,
         risk_analysis_service: RiskAnalysisService,
         alert_service: AlertService,
+        notifier: Notifier,
     ) -> None:
         self.detection_service = detection_service
         self.risk_analysis_service = risk_analysis_service
         self.alert_service = alert_service
+        self.notifier = notifier
 
     def process(self, video_source: VideoSource) -> StreamProcessingSummary:
         total_frames = 0
@@ -41,6 +44,8 @@ class StreamProcessingService:
             frame_started_at = time.perf_counter()
             detections = self.detection_service.detect(frame)
             alerts = self.risk_analysis_service.analyze(detections)
+            for alert in alerts:
+                self.notifier.publish(alert)
             self.alert_service.format_alerts(alerts)
             frame_processing_seconds = time.perf_counter() - frame_started_at
 

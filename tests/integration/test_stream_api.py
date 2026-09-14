@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import logging
 from fastapi.testclient import TestClient
 
 from backend.api.dependencies import get_yolo_model
@@ -39,17 +40,22 @@ def create_sample_video(path) -> None:
         writer.release()
 
 
-def test_start_stream_returns_processing_summary(tmp_path) -> None:
+def test_start_stream_notifies_websocket_and_logs_alert(
+    tmp_path, caplog
+) -> None:
     video_path = tmp_path / "sample.avi"
     create_sample_video(video_path)
     app.dependency_overrides[get_yolo_model] = lambda: FakeYoloModel()
     client = TestClient(app)
 
     try:
-        response = client.post(
-            "/detect/stream/start",
-            json={"video_path": str(video_path)},
-        )
+        with caplog.at_level(logging.INFO, logger="backend.infrastructure.notifier"):
+            with client.websocket_connect("/ws/alerts") as websocket:
+                response = client.post(
+                    "/detect/stream/start",
+                    json={"video_path": str(video_path)},
+                )
+                message = websocket.receive_json()
     finally:
         app.dependency_overrides.clear()
 
@@ -58,3 +64,6 @@ def test_start_stream_returns_processing_summary(tmp_path) -> None:
     assert payload["total_frames"] == 3
     assert payload["average_fps"] > 0
     assert payload["total_alerts"] == 3
+    assert message["event"] == "alert"
+    assert message["alert"]["risk_level"] == "ALTO"
+    assert any('"event": "alert"' in record.message for record in caplog.records)
