@@ -1,145 +1,63 @@
-# VisaoDoAgro
+# AgroSafe Vision
 
-Backend para detecção de obstáculos em drones agrícolas, com pipeline de visão computacional preparado para YOLO, análise de risco, alertas em tempo real, persistência e métricas.
+MVP funcional de prevenção de colisões para demonstração com smartphone, notebook e YOLO. O notebook executa o servidor FastAPI, recebe a câmera do telefone por WebRTC, processa os frames com Ultralytics YOLO e entrega um dashboard de monitoramento em tempo real.
 
-## Arquitetura
+## Funcionalidades
 
-```text
-backend/
-├── api/              # FastAPI, rotas HTTP, WebSocket e dependências
-├── services/         # Detecção, risco, alertas, streaming e métricas
-├── domain/           # Entidades Pydantic e enums do domínio
-├── infrastructure/  # YOLO, OpenCV, fonte de vídeo e notificações
-├── repositories/     # Persistência SQLite
-├── core/             # Configurações por ambiente
-└── tests/            # Testes unitários e de integração
+- `/` dashboard HUD responsivo para notebook.
+- `/phone` cliente simples para câmera traseira do celular.
+- WebRTC com `aiortc`: o servidor recebe vídeo e devolve a trilha processada.
+- YOLO real lazy-load, usando `yolo11n.pt` por padrão e baixando o modelo na primeira detecção.
+- Tracking persistente do Ultralytics quando habilitado.
+- Proximity Score calculado pela área da bounding box, sem inventar metros.
+- Approach Rate temporal, corredor central e risco SAFE/LOW/MEDIUM/HIGH/CRITICAL.
+- Histerese, confirmação de frames, QR Code, GPS, eventos, métricas e configurações ao vivo.
+
+## Executar no Windows
+
+Na pasta do projeto:
+
+```powershell
+.\start.bat
 ```
 
-O fluxo principal é:
+Ou manualmente:
 
-```text
-Vídeo → VideoSource → DetectionService → RiskAnalysisService
-			 → AlertService → Notifier (WebSocket + log JSON)
-			 → DetectionRepository (SQLite) → MetricsService
+```powershell
+py -3 -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+python -m uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-O `YoloModel` é singleton via `FastAPI Depends`. Os serviços são criados por requisição e recebem suas dependências por injeção, permitindo testes com mocks e fakes.
+Abra `https://localhost:8000` quando o launcher indicar HTTPS. O endereço LAN aparece no launcher. Para acessar a câmera de outro dispositivo, aceite o aviso do certificado local no celular e continue para a página. O notebook e o smartphone devem estar na mesma rede Wi-Fi.
 
-## Requisitos e instalação
+O notebook e o smartphone devem estar na mesma rede Wi-Fi. No dashboard, escaneie o QR Code. No telefone, permita a câmera traseira e a localização. O vídeo só passa a ser processado quando houver um stream real.
 
-Python 3.12 ou superior e `uv` são recomendados:
+## Demonstração
 
-```bash
-uv sync
-```
+1. Inicie o launcher e abra o dashboard.
+2. Escaneie o QR Code com o telefone.
+3. Pressione `START REAR CAMERA`.
+4. Aponte para uma cadeira ou pessoa.
+5. Aproxime-se e observe a caixa, `PROXIMITY`, `APPROACH` e o risco.
+6. Ajuste os thresholds em `SETTINGS`; a API aplica mudanças sem reiniciar.
+7. O áudio depende da interação inicial do navegador e do volume do sistema.
 
-Alternativamente:
+## Configuração e modelo
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+As configurações vivem em `config.py` e podem ser alteradas pela API `/api/settings`. O campo `model_path` aceita um futuro `best.pt`; não há nomes de modelo espalhados pelo processamento. As classes monitoradas são filtradas antes da inferência.
 
-No Windows, ative com `.venv\\Scripts\\activate`.
-
-## Configuração
-
-As configurações podem ser fornecidas por variáveis de ambiente ou em um arquivo `.env`:
-
-| Variável | Padrão | Finalidade |
-| --- | --- | --- |
-| `YOLO_MODEL_PATH` | `models/yolo.pt` | Caminho dos pesos YOLO |
-| `DEFAULT_VIDEO_SOURCE` | `0` | Fonte de vídeo padrão |
-| `LOG_LEVEL` | `INFO` | Nível de log |
-| `DATABASE_PATH` | `data/detections.db` | Banco SQLite |
-| `GROUND_TRUTH_PATH` | `tests/fixtures/ground_truth.json` | Anotações para métricas |
-
-Para usar um modelo YOLO real:
-
-```bash
-export YOLO_MODEL_PATH=models/yolo11n.pt
-```
-
-Os testes não carregam pesos reais: usam fakes e vídeos temporários.
-
-## Execução da API
-
-```bash
-uv run uvicorn backend.main:app --reload
-```
-
-Ou, com o ambiente ativado:
-
-```bash
-uvicorn backend.main:app --reload
-```
-
-A API fica em `http://127.0.0.1:8000`. A documentação Swagger está em `/docs`.
-
-### Endpoints principais
-
-- `GET /health`: verifica a disponibilidade da API.
-- `POST /detect/image`: recebe upload de imagem e retorna detecções e alertas.
-- `POST /detect/video`: recebe upload de vídeo e retorna um resumo.
-- `POST /detect/stream/start`: processa um vídeo local por caminho.
-- `GET /metrics/report`: calcula métricas usando o banco e o ground truth configurado.
-- `WebSocket /ws/alerts`: recebe alertas durante o processamento contínuo.
-
-Exemplo de processamento contínuo:
-
-```bash
-curl -X POST http://127.0.0.1:8000/detect/stream/start \
-	-H 'Content-Type: application/json' \
-	-d '{"video_path":"tests/fixtures/sample.avi"}'
-```
-
-Resposta esperada:
-
-```json
-{
-	"total_frames": 3,
-	"average_fps": 120.5,
-	"total_alerts": 3
-}
-```
-
-O arquivo de anotações pode ser JSON ou CSV. O formato JSON esperado é:
-
-```json
-[
-	{
-		"frame_id": "frame-1",
-		"obstacle_class": "POSTE",
-		"bounding_box": {
-			"x_min": 5,
-			"y_min": 5,
-			"x_max": 30,
-			"y_max": 30
-		}
-	}
-]
-```
-
-Para consultar outro conjunto de anotações:
-
-```bash
-curl 'http://127.0.0.1:8000/metrics/report?annotation_path=tests/fixtures/ground_truth.json'
-```
+A proximidade é `VISION / CALCULATED`: uma indicação relativa baseada no tamanho e crescimento do objeto na imagem. Não é distância física. Velocidade, GPS e heading são `GPS` quando disponíveis; caso contrário permanecem `UNAVAILABLE`.
 
 ## Testes
 
-```bash
-uv run pytest tests/unit tests/integration
+```powershell
+python -m unittest tests.test_logic -v
 ```
 
-O teste end-to-end executa vídeo, detecção fake, análise de risco, envio WebSocket, log, persistência SQLite e cálculo de métricas em uma única sequência.
+## Limitações e roadmap
 
-## Docker
+O modelo genérico não conhece fios, postes, cercas ou obstáculos agrícolas específicos. Treine e informe um `best.pt` para isso. HTTPS automático depende de OpenSSL/mkcert instalado no Windows. Não há ainda medição RGB em metros, MAVLink, mapa persistente ou gravação de vídeo.
 
-```bash
-docker build -t visaodoagro .
-docker run --rm -p 8000:8000 visaodoagro
-```
-
-Para usar pesos e dados locais, monte os diretórios correspondentes no container e configure `YOLO_MODEL_PATH` e `DATABASE_PATH`.
+As fronteiras atuais (`YoloDetector`, `ProximityEstimator`, `CollisionRiskEngine`, telemetria e câmera WebRTC) permitem adicionar `DistanceProvider`, `MavlinkTelemetryProvider`, RTSP/USB e persistência SQLite sem alterar o dashboard principal.
