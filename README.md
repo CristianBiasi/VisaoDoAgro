@@ -4,6 +4,12 @@ MVP de monitoramento visual com FastAPI, WebRTC, Ultralytics YOLO, tracking,
 telemetria, dashboard e alertas de risco. A proximidade é uma estimativa visual:
 **não mede metros e não substitui um sistema de segurança certificado.**
 
+## Documentação do código
+
+Leia a [documentação completa do código](docs/CODIGO.md) para entender os arquivos,
+classes, funções, API, fluxo WebRTC, cálculo de proximidade/risco, frontend,
+configurações, treinamento e testes. Inclui diagramas e um mapa de manutenção.
+
 ## Executar no Windows
 
 Instale Python 3.11+ e, na pasta do projeto, execute:
@@ -184,7 +190,24 @@ pelo Ultralytics caso ausente. Modelos customizados precisam existir localmente.
 Caminhos relativos são resolvidos a partir da raiz do projeto.
 ONNX/TensorRT não são aceitos neste runtime: o adaptador concentra a futura extensão
 sem prometer suporte ou fallback CPU para formatos que não o permitam.
-Não há treinamento de modelos neste projeto.
+O treinamento offline está organizado em `training/`, separado do runtime.
+
+## Treinar fios, postes, torres, construções e pássaros
+
+As pastas `datasets/obstaculos/images/{train,val,test}` e
+`datasets/obstaculos/labels/{train,val,test}` estão preparadas, mas vazias.
+As cinco classes estão definidas em `datasets/obstaculos/data.yaml`.
+
+Depois de adicionar imagens e anotações YOLO:
+
+```powershell
+.\treinar.bat --check
+.\treinar.bat
+```
+
+Leia o [passo a passo de treinamento](training/README.md) para preparar os dados,
+avaliar o resultado e instalar `models/best.pt`. Nenhum treinamento real foi
+executado nem um modelo customizado foi incluído.
 
 ## Testes
 

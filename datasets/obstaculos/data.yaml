@@ -1,0 +1,12 @@
+# Caminhos relativos a este arquivo; treinar.bat resolve para caminhos absolutos.
+path: .
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: wire
+  1: pole
+  2: tower
+  3: building
+  4: bird

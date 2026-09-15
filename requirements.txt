@@ -11,3 +11,5 @@ psutil>=6.0
 
 # Required by persistent tracking; install before the first camera frame.
 lap>=0.5.12
+# Dataset configuration for the offline training helper (already used by Ultralytics).
+PyYAML>=6.0

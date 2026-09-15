@@ -6,3 +6,13 @@ __pycache__/
 *.log
 
 .venv.backup-*/
+
+# Local training data and outputs; keep the empty scaffold and class definitions.
+datasets/obstaculos/images/**/*
+datasets/obstaculos/labels/**/*
+!datasets/obstaculos/images/**/
+!datasets/obstaculos/labels/**/
+!datasets/obstaculos/images/**/.gitkeep
+!datasets/obstaculos/labels/**/.gitkeep
+runs/
+models/*.pt
