@@ -1,1 +1,290 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgroSafe Vision</title><link rel="stylesheet" href="/static/styles.css"></head><body><header class="topbar"><div class="brand"><span class="brand-mark">AS</span><div><strong>AGROSAFE VISION</strong><small>COLLISION AWARENESS SYSTEM</small></div></div><div class="mission"><span class="live-dot"></span> LIVE MISSION <b id="session-code">AF-4281</b></div><div class="system-status" id="system-status"></div></header><main class="dashboard"><section class="stage"><div class="section-heading"><div><span class="eyebrow">VISION ENGINE / REALTIME</span><h1>Mission monitor</h1></div><div class="view-toggle"><button class="active">AI VIEW</button><button>RAW</button></div></div><div class="video-shell"><div class="scanline"></div><div id="video-placeholder"><div class="crosshair">+</div><strong>WAITING FOR PHONE STREAM</strong><span>Scan the pairing code to connect a camera</span></div><video id="remote-video" autoplay playsinline></video><div class="video-footer"><span>● <b id="stream-label">STREAM OFFLINE</b></span><span id="resolution">UNAVAILABLE</span><span>OVERLAY <b>ON</b></span></div></div><div class="lower-grid"><div class="metric-strip"><div><small>VIDEO FPS</small><b id="video-fps">--</b></div><div><small>AI FPS</small><b id="ai-fps">--</b></div><div><small>INFERENCE</small><b id="inference">-- ms</b></div><div><small>AI DEVICE</small><b id="device">--</b></div></div><div class="corridor-note"><span class="corridor-icon">⌖</span><div><small>COLLISION CORRIDOR</small><b>ACTIVE · CENTER BIAS</b></div></div></div></section><aside class="rail"><section class="panel pairing"><div class="panel-head"><span class="eyebrow">PAIR DEVICE</span><span class="status-pill">SESSION READY</span></div><div class="pair-content"><img id="qr" alt="QR code de pareamento"><div><h2>Connect camera</h2><p>Scan with the rear camera phone to join this mission.</p><code id="phone-url">https://loading/phone</code></div></div></section><section class="panel threat-panel"><div class="panel-head"><span class="eyebrow">PRIMARY THREAT</span><span id="threat-risk" class="risk-tag safe">SAFE</span></div><div id="threat-empty" class="empty-state"><b>No active threat</b><span>Objects in the corridor will appear here</span></div><div id="threat-data" hidden><h2 id="threat-name">--</h2><div class="threat-stats"><div><small>PROXIMITY</small><b id="threat-proximity">--</b></div><div><small>APPROACH</small><b id="threat-approach">--</b></div><div><small>POSITION</small><b id="threat-position">--</b></div></div></div></section><section class="panel telemetry"><div class="panel-head"><span class="eyebrow">TELEMETRY</span><span id="gps-state" class="signal">GPS OFFLINE</span></div><div class="telemetry-grid"><div><small>SPEED</small><b id="speed">--</b><em>UNAVAILABLE</em></div><div><small>HEADING</small><b id="heading">--</b><em>DEGREES</em></div><div><small>MISSION</small><b id="mission-time">00:00</b><em>ELAPSED</em></div><div><small>OBJECTS</small><b id="objects">0</b><em>TRACKED</em></div></div></section></aside><section class="bottom-grid"><section class="panel objects-panel"><div class="panel-head"><span class="eyebrow">TRACKED OBJECTS</span><span id="object-count" class="signal">0 OBJECTS</span></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>OBJECT</th><th>CONF</th><th>PROXIMITY</th><th>APPROACH</th><th>POSITION</th><th>RISK</th></tr></thead><tbody id="objects-table"><tr><td colspan="7" class="empty-row">No detections. Connect a phone camera to begin.</td></tr></tbody></table></div></section><section class="panel events-panel"><div class="panel-head"><span class="eyebrow">EVENT LOG</span><button id="clear-events" class="text-button">CLEAR</button></div><div id="events" class="events-list"><div class="empty-row">Mission events will appear here.</div></div></section></section></main><button id="settings-button" class="settings-button">⚙ SETTINGS</button><dialog id="settings-dialog"><form method="dialog"><div class="panel-head"><span class="eyebrow">LIVE CONFIGURATION</span><button class="close">×</button></div><label>Confidence threshold <input name="confidence" type="range" min=".05" max=".95" step=".05"></label><label>Corridor width <input name="corridor_width" type="range" min=".2" max="1" step=".02"></label><label>Corridor height <input name="corridor_height" type="range" min=".2" max="1" step=".02"></label><label>Medium risk threshold <input name="medium_threshold" type="number" min="0" max="100"></label><label>High risk threshold <input name="high_threshold" type="number" min="0" max="100"></label><label>Critical risk threshold <input name="critical_threshold" type="number" min="0" max="100"></label><label>Approach threshold <input name="approach_threshold" type="number" min="0" max="100"></label><label class="check"><input name="sound_enabled" type="checkbox"> Sound alerts enabled</label><button id="save-settings" class="primary" value="default">APPLY LIVE</button></form></dialog><script src="/static/app.js"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgroSafe Vision</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+<div class="brand">
+<span class="brand-mark">AS</span>
+<div>
+<strong>AGROSAFE VISION</strong>
+<small>COLLISION AWARENESS SYSTEM</small>
+</div>
+</div>
+<div class="mission">
+<span class="live-dot">
+</span> LIVE MISSION <b id="session-code">AF-4281</b>
+</div>
+<div class="system-status" id="system-status">
+</div>
+</header>
+<main class="dashboard">
+<section class="stage">
+<div class="section-heading">
+<div>
+<span class="eyebrow">VISION ENGINE / REALTIME</span>
+<h1>Mission monitor</h1>
+</div>
+<div class="view-toggle">
+<button class="active">AI VIEW</button>
+<button>RAW</button>
+</div>
+</div>
+<div class="video-shell">
+<div class="scanline">
+</div>
+<div id="video-placeholder">
+<div class="crosshair">+</div>
+<strong>WAITING FOR PHONE STREAM</strong>
+<span>Scan the pairing code to connect a camera</span>
+</div>
+<video id="remote-video" autoplay playsinline>
+</video>
+<div class="video-footer">
+<span>● <b id="stream-label">STREAM OFFLINE</b>
+</span>
+<span id="resolution">UNAVAILABLE</span>
+<span>OVERLAY <b id="overlay-status">ON</b>
+</span>
+</div>
+</div>
+<div class="lower-grid">
+<div class="metric-strip">
+<div>
+<small>VIDEO FPS</small>
+<b id="video-fps">--</b>
+</div>
+<div>
+<small>AI FPS</small>
+<b id="ai-fps">--</b>
+</div>
+<div>
+<small>INFERENCE</small>
+<b id="inference">-- ms</b>
+</div>
+<div>
+<small>AI DEVICE</small>
+<b id="device">--</b>
+</div>
+</div>
+<div class="latency-note">
+<small>RECEPÇÃO → DETECÇÃO (SERVIDOR)</small>
+<b id="server-latency">-- ms</b>
+<small id="frame-drops">0 frames descartados</small>
+<small id="result-age">Resultado: --</small>
+<small>Não inclui captura, rede ou exibição no celular.</small>
+</div>
+<div class="corridor-note">
+<span class="corridor-icon">⌖</span>
+<div>
+<small>COLLISION CORRIDOR</small>
+<b>ACTIVE · CENTER BIAS</b>
+</div>
+</div>
+</div>
+</section>
+<aside class="rail">
+<section class="panel pairing">
+<div class="panel-head">
+<span class="eyebrow">PAIR DEVICE</span>
+<span class="status-pill">SESSION READY</span>
+</div>
+<div class="pair-content">
+<img id="qr" alt="QR code de pareamento">
+<div>
+<h2>Connect camera</h2>
+<p>Scan with the rear camera phone to join this mission.</p>
+<code id="phone-url">https://loading/phone</code>
+</div>
+</div>
+</section>
+<section class="panel threat-panel">
+<div class="panel-head">
+<span class="eyebrow">PRIMARY THREAT</span>
+<span id="threat-risk" class="risk-tag safe">SAFE</span>
+</div>
+<div id="threat-empty" class="empty-state">
+<b>No active threat</b>
+<span>Objects in the corridor will appear here</span>
+</div>
+<div id="threat-data" hidden>
+<h2 id="threat-name">--</h2>
+<div class="threat-stats">
+<div>
+<small>PROXIMITY</small>
+<b id="threat-proximity">--</b>
+</div>
+<div>
+<small>APPROACH</small>
+<b id="threat-approach">--</b>
+</div>
+<div>
+<small>POSITION</small>
+<b id="threat-position">--</b>
+</div>
+</div>
+</div>
+</section>
+<section class="panel telemetry">
+<div class="panel-head">
+<span class="eyebrow">TELEMETRY</span>
+<span id="gps-state" class="signal">GPS OFFLINE</span>
+</div>
+<div class="telemetry-grid">
+<div>
+<small>SPEED</small>
+<b id="speed">--</b>
+<em>UNAVAILABLE</em>
+</div>
+<div>
+<small>HEADING</small>
+<b id="heading">--</b>
+<em>DEGREES</em>
+</div>
+<div>
+<small>MISSION</small>
+<b id="mission-time">00:00</b>
+<em>ELAPSED</em>
+</div>
+<div>
+<small>OBJECTS</small>
+<b id="objects">0</b>
+<em>TRACKED</em>
+</div>
+</div>
+</section>
+</aside>
+<section class="bottom-grid">
+<section class="panel objects-panel">
+<div class="panel-head">
+<span class="eyebrow">TRACKED OBJECTS</span>
+<span id="object-count" class="signal">0 OBJECTS</span>
+</div>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>OBJECT</th>
+<th>CONF</th>
+<th>PROXIMITY</th>
+<th>APPROACH</th>
+<th>POSITION</th>
+<th>RISK</th>
+</tr>
+</thead>
+<tbody id="objects-table">
+<tr>
+<td colspan="7" class="empty-row">No detections. Connect a phone camera to begin.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section class="panel events-panel">
+<div class="panel-head">
+<span class="eyebrow">EVENT LOG</span>
+<button id="clear-events" class="text-button">CLEAR</button>
+</div>
+<div id="events" class="events-list">
+<div class="empty-row">Mission events will appear here.</div>
+</div>
+</section>
+</section>
+</main>
+<button id="settings-button" class="settings-button">⚙ SETTINGS</button>
+<dialog id="settings-dialog">
+<form>
+  <div class="panel-head">
+<span class="eyebrow">CONFIGURAÇÃO AO VIVO</span>
+<button type="button" id="close-settings" class="close" aria-label="Fechar">×</button>
+</div>
+  <label>Desempenho
+    <select name="performance_profile">
+<option value="QUALITY">Quality · mais detalhe</option>
+<option value="BALANCED">Balanced · equilibrado</option>
+<option value="PERFORMANCE">Performance · prioriza frequência</option>
+<option value="CUSTOM">Personalizado</option>
+</select>
+  </label>
+  <label>Sensibilidade de alerta
+    <select name="proximity_preset">
+<option value="NEAR">Próxima · alerta mais tarde</option>
+<option value="NORMAL">Normal</option>
+<option value="FAR">Distante · alerta mais cedo</option>
+<option value="CUSTOM">Personalizada</option>
+</select>
+  </label>
+  <p class="settings-note">Estimativa visual de proximidade. Sem calibração ou sensor de profundidade, não representa distância real em metros. O tamanho do objeto e a câmera influenciam o alerta.</p>
+  <p class="settings-note">Modelo carregado: <strong id="loaded-model">Ainda não carregado</strong>
+</p>
+  <label class="check">
+<input name="tracking_enabled" type="checkbox"> Tracking</label>
+  <label class="check">
+<input name="overlay_enabled" type="checkbox"> Overlay</label>
+  <label class="check">
+<input name="sound_enabled" type="checkbox"> Alertas sonoros</label>
+  <details id="advanced-settings">
+<summary>Configurações avançadas</summary>
+    <fieldset>
+<legend>Modelo</legend>
+      <label>Caminho do modelo <input name="model_path" type="text" required>
+</label>
+      <label>Confiança <input name="confidence" type="number" min=".05" max=".99" step=".01">
+</label>
+      <label>IOU <input name="iou" type="number" min=".05" max=".95" step=".01">
+</label>
+      <label>Classes monitoradas, separadas por vírgula <input name="monitored_classes" type="text">
+</label>
+      <p class="settings-note">Vazio monitora todas. Os nomes devem corresponder ao modelo.</p>
+      <p class="settings-note" id="available-classes">
+</p>
+    </fieldset>
+    <fieldset>
+<legend>Desempenho</legend>
+      <label>Tamanho de inferência <input name="image_size" type="number" min="320" max="1280" step="32">
+</label>
+      <label>Limite de inferências/s <input name="inference_fps" type="number" min="1" max="60">
+</label>
+      <label>Device <input name="device" type="text" placeholder="auto, cpu, cuda:0">
+</label>
+      <label class="check">
+<input name="half_precision" type="checkbox"> FP16 quando CUDA estiver disponível</label>
+    </fieldset>
+    <fieldset>
+<legend>Proximidade / segurança</legend>
+      <label>Escala visual <input name="proximity_scale" type="number" min="50" max="300">
+</label>
+      <label>Suavização <input name="proximity_smoothing" type="number" min=".05" max="1" step=".05">
+</label>
+      <label>Corredor: largura <input name="corridor_width" type="number" min=".2" max="1" step=".02">
+</label>
+      <label>Corredor: altura <input name="corridor_height" type="number" min=".2" max="1" step=".02">
+</label>
+      <label>Limite médio <input name="medium_threshold" type="number" min="0" max="100">
+</label>
+      <label>Limite alto <input name="high_threshold" type="number" min="0" max="100">
+</label>
+      <label>Limite crítico <input name="critical_threshold" type="number" min="0" max="100">
+</label>
+      <label>Limite de aproximação <input name="approach_threshold" type="number" min="0" max="100">
+</label>
+      <label>Frames de confirmação <input name="confirmation_frames" type="number" min="1" max="12">
+</label>
+    </fieldset>
+    <label>Intervalo dos alertas (s) <input name="alert_cooldown" type="number" min="0" max="30" step=".1">
+</label>
+  </details>
+  <p id="settings-error" role="alert">
+</p>
+  <button id="save-settings" type="submit" class="primary">APLICAR AGORA</button>
+</form>
+</dialog>
+<script src="/static/app.js">
+</script>
+</body>
+</html>

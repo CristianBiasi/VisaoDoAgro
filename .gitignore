@@ -4,3 +4,5 @@ __pycache__/
 .certificates/
 .certs/
 *.log
+
+.venv.backup-*/

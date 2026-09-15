@@ -3,6 +3,8 @@ let audioContext;
 let lastAlertKey = "";
 let alarmTimer;
 let alarmLevel = "";
+let alertCooldown = 2.5;
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 
 const pt = (value) => ({
   SAFE: "SEGURO", LOW: "BAIXO", MEDIUM: "MÉDIO", HIGH: "ALTO", CRITICAL: "CRÍTICO",
@@ -91,7 +93,7 @@ function startContinuousAlert(level) {
   stopContinuousAlert();
   alarmLevel = level;
   beep(level);
-  const interval = level === "CRITICAL" ? 550 : level === "HIGH" ? 850 : 1300;
+  const interval = Math.max(alertCooldown * 1000, level === "CRITICAL" ? 550 : level === "HIGH" ? 850 : 1300);
   alarmTimer = setInterval(() => beep(alarmLevel), interval);
 }
 
@@ -106,6 +108,9 @@ function render(state) {
   $("#ai-fps").textContent = state.metrics.ai_fps || "--";
   $("#inference").textContent = state.metrics.inference_ms ? `${state.metrics.inference_ms} ms` : "-- ms";
   $("#device").textContent = state.metrics.device;
+  $("#server-latency").textContent = state.metrics.server_detection_ms == null ? "-- ms" : `${state.metrics.server_detection_ms} ms`;
+  $("#frame-drops").textContent = `${state.metrics.dropped_frames || 0} frames descartados`;
+  $("#result-age").textContent = state.metrics.result_age_ms == null ? "Resultado: --" : `Idade do resultado: ${state.metrics.result_age_ms} ms`;
   $("#speed").textContent = state.telemetry?.speed_kmh != null ? `${state.telemetry.speed_kmh.toFixed(1)} km/h` : "--";
   $("#heading").textContent = state.telemetry?.heading != null ? `${state.telemetry.heading.toFixed(0)}°` : "--";
   $("#gps-state").textContent = pt(status.gps_active ? "GPS ACTIVE" : "GPS OFFLINE");
@@ -129,13 +134,13 @@ function render(state) {
     const alertKey = `${threat.track_id}:${threat.risk}`;
     if (alertKey !== lastAlertKey) lastAlertKey = alertKey;
   }
-  $("#objects-table").innerHTML = state.detections.length ? state.detections.map((detection) => `<tr><td>#${detection.track_id}</td><td>${detection.object_class.toUpperCase()}</td><td>${(detection.confidence * 100).toFixed(0)}%</td><td>${detection.proximity}%</td><td>${detection.approach_rate >= 0 ? "+" : ""}${detection.approach_rate}%/s</td><td>${pt(detection.position)}</td><td class="risk ${detection.risk}">${pt(detection.risk)}</td></tr>`).join("") : '<tr><td colspan="7" class="empty-row">Nenhuma detecção. Conecte a câmera do celular para começar.</td></tr>';
-  $("#events").innerHTML = state.events.length ? state.events.slice(0, 12).map((event) => `<div class="event ${event.level}"><time>${new Date(event.timestamp).toLocaleTimeString()}</time><span>${eventText(event.message)}</span></div>`).join("") : '<div class="empty-row">Os eventos da missão aparecerão aqui.</div>';
+  $("#objects-table").innerHTML = state.detections.length ? state.detections.map((detection) => `<tr><td>#${detection.track_id}</td><td>${escapeHtml(detection.object_class.toUpperCase())}</td><td>${(detection.confidence * 100).toFixed(0)}%</td><td>${detection.proximity}%</td><td>${detection.approach_rate >= 0 ? "+" : ""}${detection.approach_rate}%/s</td><td>${pt(detection.position)}</td><td class="risk ${detection.risk}">${pt(detection.risk)}</td></tr>`).join("") : '<tr><td colspan="7" class="empty-row">Nenhuma detecção. Conecte a câmera do celular para começar.</td></tr>';
+  $("#events").innerHTML = state.events.length ? state.events.slice(0, 12).map((event) => `<div class="event ${event.level}"><time>${new Date(event.timestamp).toLocaleTimeString()}</time><span>${escapeHtml(eventText(event.message))}</span></div>`).join("") : '<div class="empty-row">Os eventos da missão aparecerão aqui.</div>';
 }
 
 async function poll() {
   try { render(await (await fetch("/api/state")).json()); } catch (error) { console.error(error); }
-  setTimeout(poll, 500);
+  setTimeout(poll, 200);
 }
 
 async function init() {
@@ -145,24 +150,102 @@ async function init() {
   $("#session-code").textContent = session.session;
   $("#phone-url").textContent = session.phone_url;
   $("#qr").src = "/api/qr";
-  const configuration = await (await fetch("/api/settings")).json();
+  let configuration = await (await fetch("/api/settings")).json();
   const form = $("#settings-dialog form");
-  form.insertAdjacentHTML("afterbegin", '<p class="settings-note">A proximidade é um score visual relativo, não representa metros.</p><label>Sensibilidade da proximidade <input name="proximity_scale" type="range" min="50" max="300" step="5"><output data-for="proximity_scale"></output></label><label>Suavização temporal <input name="proximity_smoothing" type="range" min=".05" max="1" step=".05"><output data-for="proximity_smoothing"></output></label>');
-  Object.entries(configuration).forEach(([key, value]) => { const input = form.elements[key]; if (input) input.type === "checkbox" ? input.checked = value : input.value = value; });
-  form.querySelectorAll("input[type=range]").forEach((input) => { const output = form.querySelector(`[data-for="${input.name}"]`); const update = () => { output.value = input.value; }; input.addEventListener("input", update); update(); });
   const settingsDialog = $("#settings-dialog");
-  settingsDialog.dataset.sound = configuration.sound_enabled;
-  $("#settings-button").addEventListener("click", () => {
-    if (typeof settingsDialog.showModal === "function") settingsDialog.showModal();
-    else settingsDialog.setAttribute("open", "");
+  const changed = new Set();
+  const presets = await (await fetch("/api/presets")).json();
+  function fillSettings(values) {
+    configuration = values;
+    Object.entries(values).forEach(([key, value]) => {
+      const input = form.elements.namedItem(key);
+      if (!input) return;
+      if (input.type === "checkbox") input.checked = value;
+      else input.value = Array.isArray(value) ? value.join(", ") : value;
+    });
+    settingsDialog.dataset.sound = String(values.sound_enabled);
+    alertCooldown = values.alert_cooldown;
+    $("#overlay-status").textContent = values.overlay_enabled ? "ON" : "OFF";
+    changed.clear();
+    stopContinuousAlert();
+  }
+  async function refreshModel() {
+    const response = await fetch("/api/model");
+    const model = await response.json();
+    $("#loaded-model").textContent = (model.loaded_model || "Ainda não carregado") +
+      (model.pending_reload ? ` · aguardando ${model.configured_model}` : "");
+    $("#available-classes").textContent = `Disponíveis: ${model.available_classes.join(", ") || "aguardando carregamento"}` +
+      (model.missing_classes.length ? `. Ausentes: ${model.missing_classes.join(", ")}` : "");
+  }
+  fillSettings(configuration);
+  form.addEventListener("input", (event) => {
+    if (event.target.name) changed.add(event.target.name);
   });
-  $("#save-settings").onclick = async () => {
-    const values = {};
-    Array.from(form.elements).forEach((input) => { if (input.name) values[input.name] = input.type === "checkbox" ? input.checked : Number(input.value); });
-    await fetch("/api/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values }) });
-    settingsDialog.dataset.sound = values.sound_enabled;
-    if (!values.sound_enabled) stopContinuousAlert();
+  // A newly selected preset supersedes earlier edits in its group.
+  const presetFields = {
+    performance_profile: ["image_size", "inference_fps", "half_precision"],
+    proximity_preset: ["proximity_scale", "medium_threshold", "high_threshold", "critical_threshold", "approach_threshold"],
   };
+  Object.entries(presetFields).forEach(([name, fields]) => {
+    form.elements.namedItem(name).addEventListener("change", () => {
+      fields.forEach((field) => changed.delete(field));
+      const preset = presets[name][form.elements.namedItem(name).value];
+      if (preset) Object.entries(preset).forEach(([field, value]) => {
+        const input = form.elements.namedItem(field);
+        if (input.type === "checkbox") input.checked = value;
+        else input.value = value;
+      });
+      changed.add(name);
+    });
+  });
+  $("#settings-button").addEventListener("click", async () => {
+    settingsDialog.showModal();
+    $("#settings-error").textContent = "";
+    try {
+      fillSettings(await (await fetch("/api/settings")).json());
+      await refreshModel();
+    } catch (error) {
+      $("#settings-error").textContent = "Não foi possível carregar as configurações.";
+    }
+  });
+  $("#close-settings").onclick = () => settingsDialog.close();
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const values = {};
+    changed.forEach((name) => {
+      const input = form.elements.namedItem(name);
+      if (name === "monitored_classes") values[name] = input.value.split(",").map((value) => value.trim()).filter(Boolean);
+      else if (input.type === "checkbox") values[name] = input.checked;
+      else if (input.type === "number") values[name] = Number(input.value);
+      else values[name] = input.value;
+    });
+    $("#save-settings").disabled = true;
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({values}),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(Array.isArray(body.detail) ? body.detail.map((item) => item.msg).join("; ") : body.detail);
+      fillSettings(body);
+      await refreshModel();
+      $("#settings-error").textContent = "";
+      settingsDialog.close();
+    } catch (error) {
+      $("#settings-error").textContent = `Não foi possível aplicar: ${error.message}`;
+    } finally {
+      $("#save-settings").disabled = false;
+    }
+  });
+  document.querySelectorAll(".view-toggle button").forEach((button, index) => {
+    button.onclick = async () => {
+      const response = await fetch("/api/settings", {method:"PATCH", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({values:{overlay_enabled:index === 0}})});
+      if (response.ok) {
+        fillSettings(await response.json());
+        document.querySelectorAll(".view-toggle button").forEach((item) => item.classList.toggle("active", item === button));
+      }
+    };
+  });
   $("#clear-events").onclick = () => { $("#events").innerHTML = ""; };
   poll();
 }

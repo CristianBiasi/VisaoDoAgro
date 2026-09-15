@@ -19,8 +19,19 @@ function setStatus(index, active, text) {
   status[index].innerHTML = `<i></i> ${text}`;
 }
 
+async function disconnectCamera() {
+  stream?.getTracks().forEach((track) => track.stop());
+  if (peer) {
+    peer.close();
+    peer = null;
+    // Wait for the server worker before starting another camera/tracker session.
+    await fetch("/api/camera/stop", {method: "POST"});
+  }
+}
+
 async function connect() {
   try {
+    await disconnectCamera();
     const videoConstraints = selectedDeviceId
       ? { deviceId: { exact: selectedDeviceId }, width: { ideal: 1920 }, height: { ideal: 1080 }, aspectRatio: { ideal: 16 / 9 } }
       : { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 }, aspectRatio: { ideal: 16 / 9 } };
@@ -53,6 +64,7 @@ async function connect() {
       }
     };
     peer.onconnectionstatechange = () => {
+      if (!peer) return;
       const connected = ["connected", "completed"].includes(peer.connectionState);
       setStatus(1, connected, connected ? "Notebook conectado" : `Notebook ${peer.connectionState}`);
     };
@@ -88,9 +100,8 @@ document.querySelector("#switch-camera").onclick = async () => {
   }
   await connect();
 };
-document.querySelector("#stop-camera").onclick = () => {
-  stream?.getTracks().forEach((track) => track.stop());
-  peer?.close();
+document.querySelector("#stop-camera").onclick = async () => {
+  await disconnectCamera();
   video.srcObject = null;
   setStatus(0, false, "Câmera parada");
   setStatus(1, false, "Aguardando notebook");

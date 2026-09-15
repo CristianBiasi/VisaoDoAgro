@@ -9,7 +9,10 @@ class Risk(IntEnum):
     CRITICAL = 4
 
 class CollisionRiskEngine:
+    """Confirm consecutive candidates before changing a tracked object risk."""
+
     def __init__(self):
+        self.candidates: dict[int, Risk] = {}
         self.pending: dict[int, tuple[Risk, int]] = defaultdict(lambda: (Risk.SAFE, 0))
 
     @staticmethod
@@ -32,17 +35,20 @@ class CollisionRiskEngine:
             return Risk.MEDIUM
         return Risk.LOW if proximity >= 12 else Risk.SAFE
 
+    def forget_missing(self, visible_ids: set[int]) -> None:
+        for track_id in set(self.pending) - visible_ids:
+            self.pending.pop(track_id, None)
+            self.candidates.pop(track_id, None)
+
     def update(self, track_id: int, candidate: Risk, confirmation_frames: int) -> Risk:
         current, count = self.pending[track_id]
-        if candidate > current:
-            count += 1
-            if count >= confirmation_frames:
-                current, count = candidate, 0
-        elif candidate < current:
-            count += 1
-            if count >= confirmation_frames + 1:
-                current, count = candidate, 0
-        else:
+        if candidate == current:
             count = 0
+        else:
+            count = count + 1 if self.candidates.get(track_id) == candidate else 1
+            required = confirmation_frames if candidate > current else confirmation_frames + 1
+            if count >= required:
+                current, count = candidate, 0
+        self.candidates[track_id] = candidate
         self.pending[track_id] = (current, count)
         return current
