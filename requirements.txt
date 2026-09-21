@@ -1,20 +1,20 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-aiortc>=1.9
-av>=12.3
-opencv-python-headless>=4.10
-numpy>=1.26
-ultralytics>=8.3
-qrcode[pil]>=7.4
-pydantic>=2.8
-psutil>=6.0
+fastapi
+uvicorn[standard]
+aiortc
+av
+opencv-python-headless
+numpy
+ultralytics
+qrcode[pil]
+pydantic
+psutil
 
 # Required by persistent tracking; install before the first camera frame.
-lap>=0.5.12
+lap
 # Dataset configuration for the offline training helper (already used by Ultralytics).
-PyYAML>=6.0
+PyYAML
 
 # Database
-SQLAlchemy>=2.0
-psycopg2-binary>=2.9
-python-dotenv>=1.0
+SQLAlchemy
+psycopg2-binary
+python-dotenv
