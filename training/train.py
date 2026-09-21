@@ -9,6 +9,13 @@ import yaml
 from config import ROOT
 from detector import select_device
 from training.dataset import check_dataset, read_dataset
+from datetime import datetime, timezone
+import json
+import sys
+
+# Garante que possamos importar de database na raiz
+sys.path.append(str(ROOT))
+from database import SessionLocal, AvaliacaoModelo
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +141,28 @@ def main(argv=None) -> int:
             
             report_path = ROOT / "relatorio_qualidade.md"
             report_path.write_text("\n".join(report_lines), encoding="utf-8")
+            
+            # ----------------------------------------------------
+            # Inserir no Banco de Dados
+            # ----------------------------------------------------
+            try:
+                with SessionLocal() as db:
+                    nova_aval = AvaliacaoModelo(
+                        data_avaliacao=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        modelo=str(weights.name),
+                        map50=metrics.box.map50,
+                        map50_95=metrics.box.map,
+                        precision_global=metrics.box.mp,
+                        recall_global=metrics.box.mr,
+                        total_fp=total_fp,
+                        total_fn=total_fn,
+                        metricas_classe=None # Opcional: poderíamos colocar um JSON aqui
+                    )
+                    db.add(nova_aval)
+                    db.commit()
+                    logger.info("Teste de Qualidade gravado no Banco de Dados com sucesso.")
+            except Exception as e:
+                logger.error("Erro ao gravar teste de qualidade no BD: %s", e)
             
             logger.info("--- AVALIACAO DE QUALIDADE DE SOFTWARE ---")
             logger.info("mAP50: %.4f | mAP50-95: %.4f", metrics.box.map50, metrics.box.map)

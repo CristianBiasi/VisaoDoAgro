@@ -19,6 +19,7 @@ from config import ROOT, updated_settings, PERFORMANCE_PROFILES, PROXIMITY_PRESE
 from detector import YoloDetector
 from models import Event, SettingsPatch, Telemetry
 from risk import Risk
+from database import Base, engine, SessionLocal, Missao, EventoAlerta, TelemetriaPonto, ObstaculoDetectado, Configuracao
 
 try:
     from aiortc import RTCPeerConnection, RTCSessionDescription
@@ -34,6 +35,7 @@ tracks = {}
 state = {
     "phone_connected": False, "camera_connected": False, "stream_connected": False,
     "gps_active": False, "sensors_active": False, "mission_started": time.time(),
+    "mission_id": None, "session_code": "AF-4281",
     "telemetry": Telemetry(), "detections": [], "events": deque(maxlen=100),
     "ai_fps": 0.0, "inference_ms": 0.0, "video_fps": 0.0, "resolution": "UNAVAILABLE",
     "device": "UNAVAILABLE", "alert_count": 0, "pcs": set(), "last_alert": {},
@@ -45,6 +47,25 @@ SCHEME = "https" if SECURE else "http"
 
 @asynccontextmanager
 async def lifespan(application):
+    # Inicializa as tabelas do Banco de Dados
+    Base.metadata.create_all(bind=engine)
+    
+    # Carrega configuracoes do BD se existirem
+    with SessionLocal() as db:
+        conf = db.query(Configuracao).filter(Configuracao.id == 1).first()
+        if conf:
+            try:
+                config.settings = config.Settings(**conf.settings_json)
+                global settings
+                settings = config.settings
+            except Exception as e:
+                logger.error("Erro ao carregar configuracoes do BD: %s", e)
+        else:
+            # Salva o default
+            new_conf = Configuracao(id=1, settings_json=settings.model_dump())
+            db.add(new_conf)
+            db.commit()
+
     yield
     await asyncio.gather(*(close_peer(pc) for pc in tuple(state["pcs"])))
     for slot in tuple(state["video_clients"]):
@@ -74,9 +95,34 @@ def local_ip():
 
 
 def add_event(message, level="INFO", track_id=None):
-    state["events"].appendleft(Event(message=message, level=level, track_id=track_id).model_dump())
+    event_timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    state["events"].appendleft(Event(timestamp=event_timestamp, message=message, level=level, track_id=track_id).model_dump())
     if level in {"HIGH", "CRITICAL"}:
         state["alert_count"] += 1
+        
+    if state["mission_id"]:
+        try:
+            with SessionLocal() as db:
+                novo_alerta = EventoAlerta(
+                    missao_id=state["mission_id"],
+                    timestamp=event_timestamp,
+                    nivel=level,
+                    mensagem=message,
+                    track_id=track_id,
+                    lat=state["telemetry"].latitude,
+                    lon=state["telemetry"].longitude,
+                    alt=state["telemetry"].altitude
+                )
+                db.add(novo_alerta)
+                
+                # Atualizar total de alertas na missao se for o caso
+                if level in {"HIGH", "CRITICAL"}:
+                    missao = db.query(Missao).filter(Missao.id == state["mission_id"]).first()
+                    if missao:
+                        missao.alertas = state["alert_count"]
+                db.commit()
+        except Exception as e:
+            logger.error("Erro ao salvar evento no BD: %s", e)
 
 
 def publish_result(result, metrics):
@@ -87,6 +133,9 @@ def publish_result(result, metrics):
     now = time.perf_counter()
     visible = {item.track_id for item in result.detections}
     state["last_alert"] = {key: value for key, value in state["last_alert"].items() if key in visible}
+    
+    db_items = []
+    
     for item in result.detections:
         if item.risk not in {"MEDIUM", "HIGH", "CRITICAL"}:
             continue
@@ -94,6 +143,47 @@ def publish_result(result, metrics):
         if item.risk != previous_level or now - previous_time >= settings.alert_cooldown:
             add_event(f"{item.object_class.upper()} risk {item.risk}", item.risk, item.track_id)
             state["last_alert"][item.track_id] = (item.risk, now)
+            
+        # Para obstáculos confirmados (alto risco), salvar/atualizar no BD
+        if item.risk in {"HIGH", "CRITICAL"} and state["mission_id"]:
+            db_items.append(item)
+
+    if db_items and state["mission_id"]:
+        try:
+            with SessionLocal() as db:
+                for item in db_items:
+                    # Tenta encontrar se o obstáculo já foi mapeado nesta missão
+                    obs = db.query(ObstaculoDetectado).filter(
+                        ObstaculoDetectado.missao_id == state["mission_id"],
+                        ObstaculoDetectado.track_id == item.track_id
+                    ).first()
+                    
+                    if not obs:
+                        obs = ObstaculoDetectado(
+                            missao_id=state["mission_id"],
+                            track_id=item.track_id,
+                            classe=item.object_class,
+                            risco_max=item.risk,
+                            confianca_max=item.confidence,
+                            proximidade_min=item.proximity,
+                            lat=state["telemetry"].latitude,
+                            lon=state["telemetry"].longitude,
+                            primeira_deteccao=time.time(),
+                            ultima_deteccao=time.time()
+                        )
+                        db.add(obs)
+                    else:
+                        # Atualiza valores se piorar o risco ou ficar mais perto/confiável
+                        if Risk[item.risk].value > Risk[obs.risco_max].value:
+                            obs.risco_max = item.risk
+                        if item.confidence > obs.confianca_max:
+                            obs.confianca_max = item.confidence
+                        if item.proximity < obs.proximidade_min:
+                            obs.proximidade_min = item.proximity
+                        obs.ultima_deteccao = time.time()
+                db.commit()
+        except Exception as e:
+            logger.error("Erro ao salvar obstáculos no BD: %s", e)
 
 
 def publish_error(exc):
@@ -191,6 +281,20 @@ async def patch_settings(payload: SettingsPatch):
     settings = candidate
     config.settings = candidate
     state["detections"] = []
+    
+    # Salvar configuracoes no BD
+    try:
+        with SessionLocal() as db:
+            conf = db.query(Configuracao).filter(Configuracao.id == 1).first()
+            if conf:
+                conf.settings_json = settings.model_dump()
+            else:
+                conf = Configuracao(id=1, settings_json=settings.model_dump())
+                db.add(conf)
+            db.commit()
+    except Exception as e:
+        logger.error("Erro ao salvar configuracoes no BD: %s", e)
+        
     add_event("Settings updated", "INFO")
     return settings.model_dump()
 
@@ -200,6 +304,26 @@ async def telemetry(payload: Telemetry):
     state["telemetry"] = payload
     state["gps_active"] = payload.latitude is not None
     state["sensors_active"] = any(value is not None for value in (payload.heading, payload.pitch, payload.roll))
+    
+    if state["mission_id"]:
+        try:
+            with SessionLocal() as db:
+                ponto = TelemetriaPonto(
+                    missao_id=state["mission_id"],
+                    timestamp=time.time(),
+                    lat=payload.latitude,
+                    lon=payload.longitude,
+                    alt=payload.altitude,
+                    velocidade=payload.speed_kmh,
+                    heading=payload.heading,
+                    pitch=payload.pitch,
+                    roll=payload.roll
+                )
+                db.add(ponto)
+                db.commit()
+        except Exception as e:
+            logger.error("Erro ao salvar telemetria no BD: %s", e)
+            
     return {"ok": True}
 
 
@@ -209,12 +333,44 @@ async def start_mission():
     state["alert_count"] = 0
     state["events"].clear()
     state["last_alert"].clear()
+    
+    # Criar registro de missao no BD
+    try:
+        with SessionLocal() as db:
+            nova_missao = Missao(
+                sessao=state["session_code"],
+                inicio=state["mission_started"],
+                modelo=settings.model_path,
+                status="EM_ANDAMENTO"
+            )
+            db.add(nova_missao)
+            db.commit()
+            db.refresh(nova_missao)
+            state["mission_id"] = nova_missao.id
+    except Exception as e:
+        logger.error("Erro ao criar missao no BD: %s", e)
+        
     add_event("Mission started", "INFO")
     return {"ok": True}
 
 
 @app.post("/api/mission/stop")
 async def stop_mission():
+    # Atualizar registro no BD
+    if state["mission_id"]:
+        try:
+            with SessionLocal() as db:
+                missao = db.query(Missao).filter(Missao.id == state["mission_id"]).first()
+                if missao:
+                    missao.fim = time.time()
+                    missao.duracao = missao.fim - missao.inicio
+                    missao.status = "CONCLUIDA"
+                    missao.alertas = state["alert_count"]
+                    db.commit()
+            state["mission_id"] = None
+        except Exception as e:
+            logger.error("Erro ao encerrar missao no BD: %s", e)
+            
     add_event("Mission stopped", "INFO")
     return {"ok": True}
 

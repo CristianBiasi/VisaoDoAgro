@@ -12,6 +12,13 @@ configurações, treinamento e testes. Inclui diagramas e um mapa de manutençã
 
 ## Executar no Windows
 
+**Pré-requisito (Banco de Dados):**
+A aplicação agora requer uma conexão com banco de dados PostgreSQL para persistir missões, telemetria e configurações.
+Crie um arquivo `.env` na raiz do projeto contendo a variável `BD` com a sua URL do Neon DB:
+```env
+BD=postgresql://usuario:senha@seu-host.neon.tech/neondb?sslmode=require...
+```
+
 Instale Python 3.11+ e, na pasta do projeto, execute:
 
 ```powershell
@@ -35,6 +42,17 @@ python -m venv .venv
 .\.venv\Scripts\python.exe generate_cert.py
 .\.venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8000 --ssl-keyfile .certs/key.pem --ssl-certfile .certs/cert.pem
 ```
+
+## Banco de Dados e Persistência
+
+O projeto utiliza o **SQLAlchemy** integrado ao **PostgreSQL** (via Neon DB) para persistir as informações operacionais. Na primeira execução, as tabelas são criadas automaticamente se não existirem.
+
+O que é salvo no banco:
+- **Missões:** Histórico de sessões iniciadas e paradas via interface.
+- **Alertas e Obstáculos:** Registros detalhados de objetos com risco alto ou crítico que apareceram no percurso, armazenados em `eventos_alerta` e `obstaculos_detectados`.
+- **Telemetria:** Pontos de GPS gravados durante a missão (`telemetria_pontos`).
+- **Configurações:** As alterações feitas no menu "Settings" sobrevivem à reinicialização.
+- **Testes de Qualidade:** Ao rodar avaliações de IA, os resultados (mAP, Precision, Recall, Falsos Positivos e Falsos Negativos) são inseridos na tabela `avaliacoes_modelo`.
 
 ## Arquitetura e fluxo
 
