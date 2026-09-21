@@ -79,8 +79,67 @@ def main(argv=None) -> int:
         common = dict(data=dataset_path, imgsz=args.imgsz, batch=args.batch, device=device,
                       workers=0, project=str(project), exist_ok=False)
         if args.evaluate:
-            model.val(split="test", name="avaliacao", **common)
-            logger.info("Avaliacao concluida. Consulte metricas por classe na pasta indicada pelo YOLO.")
+            metrics = model.val(split="test", name="avaliacao", **common)
+            
+            import numpy as np
+            cm = metrics.confusion_matrix.matrix
+            names = metrics.names
+            num_classes = len(names)
+            
+            report_lines = [
+                "# Relatorio de Qualidade de Software (Avaliacao do Modelo)",
+                "",
+                "## Metricas Globais (Medias)",
+                f"- **mAP50:** {metrics.box.map50:.4f}",
+                f"- **mAP50-95:** {metrics.box.map:.4f}",
+                f"- **Precision Global:** {metrics.box.mp:.4f}",
+                f"- **Recall Global:** {metrics.box.mr:.4f}",
+                "",
+                "## Metricas por Classe e Falsos Positivos/Negativos",
+                "A Matriz de Confusao do YOLO contabiliza fundo (background) na ultima linha e coluna.",
+                ""
+            ]
+            
+            total_fp = 0
+            total_fn = 0
+            
+            for i in range(num_classes):
+                class_name = names.get(i, f"class_{i}")
+                tp = int(cm[i, i])
+                fp = int(np.sum(cm[:, i]) - tp)
+                fn = int(np.sum(cm[i, :]) - tp)
+                
+                total_fp += fp
+                total_fn += fn
+                
+                prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+                rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                
+                report_lines.extend([
+                    f"### Classe: {class_name}",
+                    f"- **Verdadeiros Positivos (TP):** {tp}",
+                    f"- **Falsos Positivos (FP):** {fp} (Falso Alarme)",
+                    f"- **Falsos Negativos (FN):** {fn} (Omissao)",
+                    f"- **Precision:** {prec:.4f}",
+                    f"- **Recall:** {rec:.4f}",
+                    ""
+                ])
+                
+            report_lines.extend([
+                "## Resumo de Falsos Positivos e Negativos",
+                f"- **Total de Falsos Positivos (falsos alarmes):** {total_fp}",
+                f"- **Total de Falsos Negativos (omissoes):** {total_fn}",
+                ""
+            ])
+            
+            report_path = ROOT / "relatorio_qualidade.md"
+            report_path.write_text("\n".join(report_lines), encoding="utf-8")
+            
+            logger.info("--- AVALIACAO DE QUALIDADE DE SOFTWARE ---")
+            logger.info("mAP50: %.4f | mAP50-95: %.4f", metrics.box.map50, metrics.box.map)
+            logger.info("Falsos Positivos Totais: %d | Falsos Negativos Totais: %d", total_fp, total_fn)
+            logger.info("Relatorio completo salvo em: %s", report_path)
+            logger.info("Consulte graficos na pasta indicada pelo YOLO.")
         else:
             # No automatic AMP-check download; FP32 is a reproducible initial baseline.
             model.train(epochs=args.epochs, name="obstaculos", seed=42, amp=False, **common)
