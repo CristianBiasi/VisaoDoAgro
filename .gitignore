@@ -16,3 +16,4 @@ datasets/obstaculos/labels/**/*
 !datasets/obstaculos/labels/**/.gitkeep
 runs/
 models/*.pt
+.tmp_videos/

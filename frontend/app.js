@@ -247,6 +247,70 @@ async function init() {
     };
   });
   $("#clear-events").onclick = () => { $("#events").innerHTML = ""; };
+  
+  let localVideoRunning = false;
+  
+  document.querySelectorAll('input[name="video_source"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const source = e.target.value;
+      $("#source-phone").style.display = source === 'phone' ? 'flex' : 'none';
+      $("#source-local").style.display = source === 'local' ? 'block' : 'none';
+      if (source === 'phone' && localVideoRunning) {
+        stopLocalVideo();
+      }
+    });
+  });
+
+  $("#local-video-file").addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    $("#start-local-video").disabled = !file;
+  });
+
+  $("#start-local-video").addEventListener('click', async () => {
+    const file = $("#local-video-file").files[0];
+    if (!file) return;
+
+    $("#start-local-video").disabled = true;
+    $("#start-local-video").textContent = "UPLOADING...";
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/video/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Server error ${response.status}`);
+      }
+
+      localVideoRunning = true;
+      $("#start-local-video").style.display = 'none';
+      $("#stop-local-video").style.display = 'block';
+
+    } catch (e) {
+      console.error("Local video upload failed:", e);
+      alert("Falha ao enviar o vídeo: " + e.message);
+      $("#start-local-video").disabled = false;
+      $("#start-local-video").textContent = "START VIDEO SIMULATION";
+    }
+  });
+  
+  async function stopLocalVideo() {
+    localVideoRunning = false;
+    await fetch("/api/video/stop", {method: "POST"}).catch(() => {});
+    $("#start-local-video").style.display = 'block';
+    $("#start-local-video").disabled = false;
+    $("#start-local-video").textContent = "START VIDEO SIMULATION";
+    $("#stop-local-video").style.display = 'none';
+  }
+
+  $("#stop-local-video").addEventListener('click', stopLocalVideo);
+
+
   poll();
 }
 

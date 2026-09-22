@@ -1,14 +1,17 @@
 import asyncio
+from datetime import datetime, timezone
 import io
 import json
 import logging
 import socket
+import tempfile
 import time
 from collections import deque
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import psutil
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +23,7 @@ from detector import YoloDetector
 from models import Event, SettingsPatch, Telemetry
 from risk import Risk
 from database import Base, engine, SessionLocal, Missao, EventoAlerta, TelemetriaPonto, ObstaculoDetectado, Configuracao
+from local_video import LocalVideoProcessor
 
 try:
     from aiortc import RTCPeerConnection, RTCSessionDescription
@@ -32,6 +36,7 @@ logger = logging.getLogger(__name__)
 settings = config.settings
 detector = YoloDetector()
 tracks = {}
+local_video_processor: LocalVideoProcessor | None = None
 state = {
     "phone_connected": False, "camera_connected": False, "stream_connected": False,
     "gps_active": False, "sensors_active": False, "mission_started": time.time(),
@@ -391,7 +396,53 @@ async def close_peer(pc):
 
 @app.post("/api/camera/stop")
 async def stop_camera():
+    global local_video_processor
+    if local_video_processor and local_video_processor.running:
+        await local_video_processor.stop()
     await asyncio.gather(*(close_peer(pc) for pc in tuple(state["pcs"])))
+    state["stream_connected"] = state["phone_connected"] = state["camera_connected"] = False
+    state["detections"] = []
+    state["metrics"] = {}
+    return {"ok": True}
+
+
+@app.post("/api/video/upload")
+async def upload_video(file: UploadFile):
+    """Accept a local video file and process it server-side with OpenCV + YOLO."""
+    global local_video_processor
+    # Stop any existing stream first
+    if state["pcs"]:
+        await asyncio.gather(*(close_peer(pc) for pc in tuple(state["pcs"])))
+    if local_video_processor and local_video_processor.running:
+        await local_video_processor.stop()
+
+    # Save uploaded file to a temp location
+    temp_dir = ROOT / ".tmp_videos"
+    temp_dir.mkdir(exist_ok=True)
+    temp_path = temp_dir / f"upload_{int(time.time())}.mp4"
+    with open(temp_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    # Create processor and start background task
+    local_video_processor = LocalVideoProcessor(
+        detector, lambda: settings, publish_result, publish_error, state["video_clients"]
+    )
+    local_video_processor.start(str(temp_path))
+    add_event("Local video started", "INFO")
+    return {"ok": True, "filename": file.filename}
+
+
+@app.post("/api/video/stop")
+async def stop_video():
+    """Stop local video processing."""
+    global local_video_processor
+    if local_video_processor and local_video_processor.running:
+        await local_video_processor.stop()
+    state["stream_connected"] = state["phone_connected"] = state["camera_connected"] = False
+    state["detections"] = []
+    state["metrics"] = {}
+    add_event("Local video stopped", "INFO")
     return {"ok": True}
 
 

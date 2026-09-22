@@ -90,15 +90,30 @@
 <aside class="rail">
 <section class="panel pairing">
 <div class="panel-head">
-<span class="eyebrow">PAIR DEVICE</span>
+<span class="eyebrow">VIDEO SOURCE</span>
 <span class="status-pill">SESSION READY</span>
 </div>
-<div class="pair-content">
-<img id="qr" alt="QR code de pareamento">
+<div class="pair-content" style="flex-direction: column; align-items: stretch; gap: 10px; margin-top: 10px;">
+<div class="source-toggle" style="display: flex; gap: 15px; font-size: 11px; margin-bottom: 5px;">
+<label><input type="radio" name="video_source" value="phone" checked> Smartphone</label>
+<label><input type="radio" name="video_source" value="local"> Local Video File</label>
+</div>
+
+<div id="source-phone" style="display: flex; gap: 15px; align-items: center;">
+<img id="qr" alt="QR code de pareamento" style="width: 75px; height: 75px;">
 <div>
 <h2>Connect camera</h2>
 <p>Scan with the rear camera phone to join this mission.</p>
 <code id="phone-url">https://loading/phone</code>
+</div>
+</div>
+
+<div id="source-local" style="display: none;">
+<h2>Upload Video</h2>
+<p>Select a local video file to simulate the camera.</p>
+<input type="file" id="local-video-file" accept="video/mp4,video/x-m4v,video/*,video/webm" style="width: 100%; margin: 8px 0; background: var(--bg); padding: 5px; color: var(--text);">
+<button id="start-local-video" class="primary" style="width: 100%; margin-top: 5px;" disabled>START VIDEO SIMULATION</button>
+<button id="stop-local-video" style="width: 100%; margin-top: 5px; display: none;">STOP VIDEO</button>
 </div>
 </div>
 </section>
