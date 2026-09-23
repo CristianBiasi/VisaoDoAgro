@@ -20,6 +20,8 @@ class ObjectDetection:
 
 def select_device(requested: str, torch_module=None) -> str:
     """Keep backend selection here so the rest of the app is device agnostic."""
+    if requested in ("directml", "dml"):
+        return "directml"
     if torch_module is None:
         import torch as torch_module
     if requested == "cpu":
@@ -91,7 +93,29 @@ class YoloDetector:
         self.loaded_model = settings.model_path
         self._load_key = key
         self._class_key = None
-        logger.info("Loaded %s on %s (FP16=%s)", settings.model_path, device, self.half)
+        
+        if str(resolved).endswith(".onnx") and device == "directml":
+            try:
+                import onnxruntime as ort
+                import numpy as np
+                self.model.predict(np.zeros((32, 32, 3), dtype=np.uint8), device="cpu", verbose=False)
+                available = ort.get_available_providers()
+                if "DmlExecutionProvider" in available:
+                    session_options = ort.SessionOptions()
+                    self.model.predictor.model = ort.InferenceSession(
+                        str(resolved),
+                        sess_options=session_options,
+                        providers=["DmlExecutionProvider", "CPUExecutionProvider"]
+                    )
+                    logger.info("Using DirectML provider for ONNX inference")
+                else:
+                    logger.warning("DirectML provider not available: %s", available)
+                    self.device = "cpu"
+            except Exception as e:
+                logger.warning("Could not enable DirectML: %s", e)
+                self.device = "cpu"
+                
+        logger.info("Loaded %s on %s (FP16=%s)", settings.model_path, self.device, self.half)
 
     def _classes(self, settings: Settings):
         key = (tuple(settings.monitored_classes), settings.tracking_enabled)
@@ -115,7 +139,8 @@ class YoloDetector:
             return []
         kwargs = dict(source=frame, conf=settings.confidence, iou=settings.iou,
                       imgsz=settings.image_size, classes=classes, verbose=False,
-                      device=self.device, half=self.half)
+                      device="cpu" if self.device == "directml" else self.device, 
+                      half=self.half)
         started = time.perf_counter()
         try:
             results = self._infer(settings, kwargs)

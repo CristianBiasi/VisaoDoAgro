@@ -78,10 +78,10 @@ class Settings(BaseModel):
     @classmethod
     def validate_device(cls, value: str) -> str:
         value = value.strip().lower()
-        if value not in {"auto", "cpu", "cuda"} and not (
+        if value not in {"auto", "cpu", "cuda", "directml", "dml"} and not (
             value.startswith("cuda:") and value[5:].isdigit()
         ):
-            raise ValueError("device must be auto, cpu, cuda or cuda:N")
+            raise ValueError("device must be auto, cpu, cuda, cuda:N, or directml")
         return value
 
     @field_validator("model_path")
@@ -90,8 +90,9 @@ class Settings(BaseModel):
         value = value.strip()
         if not value:
             raise ValueError("model_path cannot be empty")
-        if Path(value).suffix.lower() != ".pt":
-            raise ValueError("This runtime currently supports YOLO .pt models")
+        allowed = {".pt", ".onnx", ".engine"}
+        if Path(value).suffix.lower() not in allowed:
+            raise ValueError(f"Supported model formats: {', '.join(sorted(allowed))}")
         return value
 
     @field_validator("monitored_classes")

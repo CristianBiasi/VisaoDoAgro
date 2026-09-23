@@ -5,6 +5,8 @@ av
 opencv-python-headless
 numpy
 ultralytics
+onnxruntime-directml
+onnx
 qrcode[pil]
 pydantic
 psutil

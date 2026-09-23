@@ -52,7 +52,7 @@ class SettingsTests(unittest.TestCase):
         original = Settings()
         for changes in ({"inference_fps": 0}, {"confidence": 2}, {"high_threshold": 20},
                         {"image_size": 415}, {"device": "garbage"}, {"unknown": True},
-                        {"model_path": ""}, {"model_path": "best.onnx"},
+                        {"model_path": ""}, {"model_path": "best.txt"},
                         {"performance_profile": "FAST"}):
             with self.subTest(changes=changes), self.assertRaises(ValidationError):
                 updated_settings(original, changes)
