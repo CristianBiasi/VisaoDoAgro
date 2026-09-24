@@ -229,6 +229,9 @@ executado nem um modelo customizado foi incluído.
 
 ## Testes
 
+Consulte [os cinco testes unitários mais importantes](docs/TESTES_UNITARIOS.md)
+para entender os cenários, resultados esperados, isolamento do banco e como executar.
+
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -v
 ```

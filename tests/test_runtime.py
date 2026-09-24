@@ -16,6 +16,7 @@ from processing import DetectionProcessor, FrameResult
 from proximity import ProximityEstimator
 from risk import CollisionRiskEngine, Risk
 from video_pipeline import LatestFrame, ProcessedTrack
+from tests.support import IsolatedAppMixin
 
 
 def frame(value=0, pts=0):
@@ -315,16 +316,9 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
         await track.aclose()
 
 
-class ApiTests(unittest.IsolatedAsyncioTestCase):
+class ApiTests(IsolatedAppMixin, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        import app
-        self.app = app
-        self.original = app.settings
-
-    async def asyncTearDown(self):
-        self.app.settings = self.original
-        self.app.config.settings = self.original
-        self.app.state["detections"] = []
+        self.original = self.app.settings
 
     async def test_patch_rejects_invalid_and_applies_valid_to_runtime(self):
         from models import SettingsPatch

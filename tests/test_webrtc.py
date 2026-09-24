@@ -5,10 +5,12 @@ from unittest.mock import Mock, patch
 
 from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 
-import app
+from tests.support import IsolatedAppMixin, load_app
+
+app = load_app()
 
 
-class WebRTCTests(unittest.IsolatedAsyncioTestCase):
+class WebRTCTests(IsolatedAppMixin, unittest.IsolatedAsyncioTestCase):
     async def test_offer_returns_processed_video_and_cleans_up(self):
         client = RTCPeerConnection(RTCConfiguration(iceServers=[]))
         detector = Mock()

@@ -8,6 +8,9 @@ from unittest.mock import patch
 from PIL import Image
 
 from training.dataset import check_dataset, read_dataset
+from tests.support import load_database
+
+load_database()
 from training.train import main
 
 
