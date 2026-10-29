@@ -1,8 +1,8 @@
 # AgroSafe Vision
 
-MVP de monitoramento visual com FastAPI, WebRTC, Ultralytics YOLO, tracking,
-telemetria, dashboard e alertas de risco. A proximidade é uma estimativa visual:
-**não mede metros e não substitui um sistema de segurança certificado.**
+MVP de monitoramento visual com FastAPI, WebRTC, vídeo offline, Ultralytics YOLO,
+tracking, telemetria, banco de dados PostgreSQL, dashboard e alertas de risco.
+A proximidade é uma estimativa visual: **não mede metros e não substitui um sistema de segurança certificado.**
 
 ## Documentação do código
 
@@ -13,7 +13,7 @@ configurações, treinamento e testes. Inclui diagramas e um mapa de manutençã
 ## Executar no Windows
 
 **Pré-requisito (Banco de Dados):**
-A aplicação agora requer uma conexão com banco de dados PostgreSQL para persistir missões, telemetria e configurações.
+A aplicação requer uma conexão com banco de dados PostgreSQL para persistir missões, telemetria, obstáculos e configurações.
 Crie um arquivo `.env` na raiz do projeto contendo a variável `BD` com a sua URL do Neon DB:
 ```env
 BD=postgresql://usuario:senha@seu-host.neon.tech/neondb?sslmode=require...
@@ -34,9 +34,15 @@ Não requer OpenSSL/mkcert. Aceite o certificado local no navegador para a demon
 Se a pasta foi copiada de outro computador, a `.venv` antiga não é portável:
 renomeie-a para backup e execute novamente o launcher.
 
-Execução manual, depois de instalar as dependências:
+Execução manual (com `uv` ou `pip`), depois de instalar as dependências:
 
 ```powershell
+# Opção 1: Usando uv
+uv sync
+uv run python generate_cert.py
+uv run uvicorn app:app --host 0.0.0.0 --port 8000 --ssl-keyfile .certs/key.pem --ssl-certfile .certs/cert.pem
+
+# Opção 2: Usando venv + pip
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe generate_cert.py
@@ -48,30 +54,33 @@ python -m venv .venv
 O projeto utiliza o **SQLAlchemy** integrado ao **PostgreSQL** (via Neon DB) para persistir as informações operacionais. Na primeira execução, as tabelas são criadas automaticamente se não existirem.
 
 O que é salvo no banco:
-- **Missões:** Histórico de sessões iniciadas e paradas via interface.
+- **Missões:** Histórico de sessões iniciadas e paradas via interface (`missoes`).
 - **Alertas e Obstáculos:** Registros detalhados de objetos com risco alto ou crítico que apareceram no percurso, armazenados em `eventos_alerta` e `obstaculos_detectados`.
-- **Telemetria:** Pontos de GPS gravados durante a missão (`telemetria_pontos`).
-- **Configurações:** As alterações feitas no menu "Settings" sobrevivem à reinicialização.
-- **Testes de Qualidade:** Ao rodar avaliações de IA, os resultados (mAP, Precision, Recall, Falsos Positivos e Falsos Negativos) são inseridos na tabela `avaliacoes_modelo`.
+- **Telemetria:** Pontos de GPS e orientação gravados durante a missão (`telemetria_pontos`).
+- **Configurações:** As alterações feitas no menu "Settings" são salvas na tabela `configuracoes` e sobrevivem à reinicialização.
+- **Testes de Qualidade:** Ao rodar avaliações de IA no treinamento, os resultados (mAP, Precision, Recall, Falsos Positivos e Falsos Negativos) são inseridos na tabela `avaliacoes_modelo`.
 
 ## Arquitetura e fluxo
 
 ```text
-celular → WebRTC → recepção contínua → frame mais recente
-                                      ├→ inferência serial fora do event loop
-                                      │  YOLO → tracking → proximidade → risco
-                                      └→ vídeo atual + último overlay ainda válido
-                                         ├→ WebRTC de volta ao celular
-                                         └→ JPEG → dashboard
+celular (WebRTC) ──┐
+                   ├→ recepção contínua → frame mais recente
+vídeo local (MP4) ─┘                    ├→ inferência serial fora do event loop
+                                        │  YOLO → tracking → proximidade → risco
+                                        └→ vídeo atual + último overlay ainda válido
+                                           ├→ WebRTC de volta ao celular
+                                           └→ JPEG → dashboard
 ```
 
-- `app.py`: rotas, sessão, telemetria, eventos e integração.
-- `video_pipeline.py`: slots de tamanho 1, descarte, métricas e ciclo de vida.
-- `detector.py`: carregamento YOLO, classes e device; retorna objetos estruturados.
+- `app.py`: rotas, sessão, telemetria, eventos, upload de vídeo e integração com BD.
+- `video_pipeline.py`: slots de tamanho 1, descarte, métricas e ciclo de vida WebRTC.
+- `local_video.py`: leitura e processamento assíncrono de vídeos offline enviados via dashboard.
+- `detector.py`: carregamento YOLO (`.pt`, `.onnx`, `.engine`), classes e device (`cpu`, `cuda`, `directml`); retorna objetos estruturados.
 - `processing.py`: compõe detecção, `ProximityEstimator` e `CollisionRiskEngine`.
 - `overlay.py`: desenha sobre o frame atual, nas coordenadas originais.
 - `config.py`: validação e presets, preservando a API de campos planos.
-- `models.py`: contratos do dashboard e telemetria; `models/`: futuros pesos.
+- `database.py`: modelos SQLAlchemy e sessão de persistência no PostgreSQL.
+- `models.py`: contratos do dashboard e telemetria; `best.pt` / `yolo11n.pt` / `yolo11n.onnx`: pesos disponíveis.
 
 A inferência bloqueante executa fora do event loop porque a fila de recepção do
 aiortc continuaria acumulando frames enquanto o YOLO bloqueasse a rede.
@@ -80,10 +89,17 @@ pelo mais recente. A renderização também ocorre fora do event loop.
 Nenhuma fila de inferências é criada. Cada dashboard tem um único JPEG pendente;
 um espectador lento não bloqueia o recebimento nem os outros espectadores.
 
-O runtime atende **uma câmera ativa por missão**. Uma segunda conexão recebe 409
-para evitar misturar IDs de tracking e estado de risco. Encerre a câmera atual antes
-de conectar outra. As tarefas são encerradas e a inferência em andamento é aguardada
-antes de liberar o detector.
+O runtime atende **uma câmera ou vídeo ativo por missão**. Uma segunda conexão WebRTC
+recebe 409 para evitar misturar IDs de tracking e estado de risco. Encerre a câmera
+atual antes de conectar outra. As tarefas são encerradas e a inferência em andamento
+é aguardada antes de liberar o detector.
+
+### Monitoramento com Vídeo Offline
+
+Além da câmera ao vivo via WebRTC, o dashboard permite enviar arquivos de vídeo locais (`POST /api/video/upload`) para análise e simulação de missão:
+- O `LocalVideoProcessor` (`local_video.py`) lê o vídeo com OpenCV em background, converte cada frame e executa o mesmo pipeline de detecção, estimativa de proximidade, motor de risco e persistência no banco.
+- O envio de um vídeo encerra automaticamente qualquer stream de câmera ativo (e vice-versa), evitando conflito de IDs de rastreamento.
+- O processamento pode ser interrompido a qualquer momento via `POST /api/video/stop`.
 
 ## Performance profiles
 
@@ -106,13 +122,12 @@ evitar instalação no primeiro frame. Todas as caixas são transferidas para CP
 em vez de várias transferências por objeto. JPEG só é codificado quando há clientes
 e respeita o limite de 12/s. O vídeo não fica congelado no último frame da IA.
 
-### CPU/GPU
+### CPU/GPU (NVIDIA CUDA e AMD Radeon DirectML)
 
 `device=auto` escolhe CUDA quando o PyTorch instalado a disponibiliza; caso contrário,
-usa CPU. Advanced aceita `cpu`, `cuda` e `cuda:N`.
-FP16 só é solicitado para CUDA; falha de runtime CUDA tenta novamente em CPU/FP32
-e registra o erro. Um build CPU do PyTorch não passa a usar a GPU apenas por alterar
-esse campo. Outros backends ficam concentrados no adaptador, mas não estão implementados.
+usa CPU. Advanced aceita `cpu`, `cuda`, `cuda:N` e `directml` (ou `dml`).
+- **NVIDIA (CUDA):** FP16 só é solicitado para CUDA; falha de runtime CUDA tenta novamente em CPU/FP32 e registra o erro. Um build CPU do PyTorch não passa a usar a GPU apenas por alterar esse campo.
+- **AMD Radeon (DirectML):** Ao utilizar um modelo `.onnx` (como `yolo11n.onnx`) com `device=directml`, o detector inicializa o `onnxruntime-directml` (`DmlExecutionProvider`), permitindo aceleração por GPU em placas AMD no Windows (com fallback automático para CPU caso o provedor não esteja disponível).
 
 ### Métricas e avaliação
 
@@ -168,7 +183,7 @@ sem modificar a configuração anterior.
 Os presets são aplicados antes de overrides explícitos no mesmo pedido.
 Valores avançados que divergem de um preset identificam o perfil como CUSTOM.
 Mudar um preset mantém os campos que ele não controla.
-As configurações são mantidas **em memória**; reiniciar restaura os defaults.
+As configurações são mantidas em memória durante a execução e **persistidas automaticamente no banco de dados PostgreSQL** (tabela `configuracoes`), sendo recarregadas ao iniciar a aplicação.
 
 `model_path`, device e precisão provocam recarga serial na próxima inferência.
 Resultados calculados com a configuração anterior são descartados.
@@ -176,12 +191,12 @@ Trocar tracking recarrega o modelo para remover callbacks de rastreamento; class
 Falha ao carregar um modelo é registrada, não derruba a API e não produz resultados
 silenciosamente usando o modelo anterior. Corrija o caminho nas configurações.
 
-## Using a custom trained YOLO model
+## Usando modelos YOLO customizados e ONNX
 
-O arquivo `models/best.pt` **não está incluído**. Quando existir um modelo treinado:
+O repositório já inclui na raiz o modelo customizado treinado `best.pt`, além dos modelos base `yolo11n.pt` e `yolo11n.onnx`. Para usar o modelo treinado ou outro peso customizado (`.pt`, `.onnx` ou `.engine`):
 
-1. Copie seus pesos para `models/best.pt`.
-2. Em Advanced Settings, altere o caminho para `models/best.pt`.
+1. Coloque seus pesos na raiz (ex.: `best.pt`) ou em `models/best.pt`.
+2. Em Advanced Settings, altere o caminho de `model_path` (ex.: `best.pt` ou `yolo11n.onnx`).
 3. Configure classes ou deixe a lista vazia para monitorar todas.
 4. A próxima inferência carrega o modelo; reabra SETTINGS para consultar as classes.
 
@@ -190,8 +205,8 @@ Exemplo da API:
 ```json
 {
   "values": {
-    "model_path": "models/best.pt",
-    "monitored_classes": ["tree", "wire", "pole", "fence", "tractor", "person", "animal", "building"],
+    "model_path": "best.pt",
+    "monitored_classes": ["fio", "poste", "torre", "construcao", "passaro"],
     "confidence": 0.45,
     "iou": 0.45
   }
@@ -206,15 +221,14 @@ modelo configurado/carregado, classes disponíveis/ausentes e recarga pendente.
 O modelo genérico `yolo11n.pt` continua na raiz por compatibilidade e pode ser baixado
 pelo Ultralytics caso ausente. Modelos customizados precisam existir localmente.
 Caminhos relativos são resolvidos a partir da raiz do projeto.
-ONNX/TensorRT não são aceitos neste runtime: o adaptador concentra a futura extensão
-sem prometer suporte ou fallback CPU para formatos que não o permitam.
+Formatos `.pt`, `.onnx` e `.engine` são aceitos pela validação de configuração.
 O treinamento offline está organizado em `training/`, separado do runtime.
 
 ## Treinar fios, postes, torres, construções e pássaros
 
 As pastas `datasets/obstaculos/images/{train,val,test}` e
-`datasets/obstaculos/labels/{train,val,test}` estão preparadas, mas vazias.
-As cinco classes estão definidas em `datasets/obstaculos/data.yaml`.
+`datasets/obstaculos/labels/{train,val,test}` estão preparadas para o dataset YOLO,
+com as cinco classes definidas em `datasets/obstaculos/data.yaml`. Para converter anotações do dataset TTPLA (polígonos JSON) para o formato YOLO, utilize o script `convert_ttpla_to_yolo.py`.
 
 Depois de adicionar imagens e anotações YOLO:
 
@@ -223,9 +237,7 @@ Depois de adicionar imagens e anotações YOLO:
 .\treinar.bat
 ```
 
-Leia o [passo a passo de treinamento](training/README.md) para preparar os dados,
-avaliar o resultado e instalar `models/best.pt`. Nenhum treinamento real foi
-executado nem um modelo customizado foi incluído.
+O script `training/train.py` executa o treinamento, gera relatórios detalhados de qualidade (mAP, Precision, Recall, Falsos Positivos e Falsos Negativos por classe) e salva os resultados na tabela `avaliacoes_modelo` do banco de dados. Leia o [passo a passo de treinamento](training/README.md) para mais detalhes.
 
 ## Testes
 
@@ -244,10 +256,10 @@ O detector é simulado: a suíte não baixa pesos e não requer GPU.
 
 ## Limitações
 
-- O modelo genérico não é especializado em fios, postes ou cercas agrícolas.
+- O modelo genérico (`yolo11n.pt`) não é especializado em fios, postes ou cercas agrícolas; para esse cenário, utilize o modelo treinado (`best.pt`).
 - Tracking/risco com câmera móvel precisam de avaliação em cenas reais.
 - O primeiro carregamento/aquecimento custa mais que inferências posteriores.
-- Não há distância RGB em metros, MAVLink, gravação, persistência de missões ou sensores.
+- Não há distância física RGB em metros (apenas estimativa visual), integração MAVLink ou sensores de profundidade dedicados (LiDAR/estéreo).
 - Certificado local, firewall e Wi-Fi precisam permitir acesso pelo celular.
 - A confirmação é por inferência; o tempo até confirmar varia com o desempenho.
 - Áudio depende de interação no navegador e volume do dispositivo.
