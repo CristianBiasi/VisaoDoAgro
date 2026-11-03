@@ -14,9 +14,10 @@ configurações, treinamento e testes. Inclui diagramas e um mapa de manutençã
 
 **Pré-requisito (Banco de Dados):**
 A aplicação requer uma conexão com banco de dados PostgreSQL para persistir missões, telemetria, obstáculos e configurações.
-Crie um arquivo `.env` na raiz do projeto contendo a variável `BD` com a sua URL do Neon DB:
-```env
-BD=postgresql://usuario:senha@seu-host.neon.tech/neondb?sslmode=require...
+Copie o arquivo `.env.example` para `.env` na raiz do projeto e defina a variável `BD` com a URL de conexão do seu banco (não versione o arquivo `.env`):
+
+```powershell
+copy .env.example .env
 ```
 
 Instale Python 3.11+ e, na pasta do projeto, execute:

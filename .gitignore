@@ -5,6 +5,11 @@ __pycache__/
 .certs/
 *.log
 
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
 .venv.backup-*/
 
 # Local training data and outputs; keep the empty scaffold and class definitions.
