@@ -40,21 +40,55 @@ function translateStaticInterface() {
 }
 
 function connectProcessedVideo() {
-  const oldVideo = $("#remote-video");
-  const image = document.createElement("img");
-  image.id = "remote-video";
-  image.alt = "Vídeo processado da câmera do telefone";
-  image.style.cssText = "width:100%;height:100%;object-fit:contain;display:none";
-  oldVideo.replaceWith(image);
+  let canvas = document.getElementById("remote-video-canvas");
+  if (!canvas) {
+    const oldVideo = $("#remote-video");
+    canvas = document.createElement("canvas");
+    canvas.id = "remote-video-canvas";
+    if (oldVideo) {
+      oldVideo.replaceWith(canvas);
+    } else {
+      $(".video-shell")?.appendChild(canvas);
+    }
+  }
+
+  const ctx = canvas.getContext("2d", { alpha: false });
+  let pendingBlob = null;
+  let isDecoding = false;
+
+  function renderLoop() {
+    if (pendingBlob && !isDecoding) {
+      const blobToRender = pendingBlob;
+      pendingBlob = null;
+      isDecoding = true;
+
+      createImageBitmap(blobToRender)
+        .then((bitmap) => {
+          if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+          }
+          ctx.drawImage(bitmap, 0, 0);
+          bitmap.close();
+          $(".video-shell")?.classList.add("connected");
+        })
+        .catch((err) => {
+          console.debug("Frame decode failed:", err);
+        })
+        .finally(() => {
+          isDecoding = false;
+        });
+    }
+    requestAnimationFrame(renderLoop);
+  }
+
+  requestAnimationFrame(renderLoop);
+
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(`${protocol}://${location.host}/ws/video`);
   socket.binaryType = "blob";
   socket.onmessage = (event) => {
-    const previous = image.src;
-    image.src = URL.createObjectURL(event.data);
-    image.style.display = "block";
-    if (previous) URL.revokeObjectURL(previous);
-    $(".video-shell").classList.add("connected");
+    pendingBlob = event.data;
   };
   socket.onclose = () => setTimeout(connectProcessedVideo, 1500);
 }
