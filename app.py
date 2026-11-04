@@ -214,9 +214,18 @@ def snapshot():
                 or time.perf_counter() - result.received_at > MAX_OVERLAY_AGE):
             detections = []
     primary = max(detections, key=lambda item: (Risk[item["risk"]], item["proximity"]), default=None)
+    try:
+        cpu_val = round(psutil.cpu_percent(interval=None), 1)
+        ram_val = round(psutil.virtual_memory().percent, 1)
+    except Exception:
+        cpu_val = 0.0
+        ram_val = 0.0
+    model_name = getattr(detector, "loaded_model", None) or settings.model_path
+
     defaults = {"ai_fps": 0, "inference_ms": 0, "video_fps": 0, "device": "UNAVAILABLE",
                 "server_detection_ms": None, "result_age_ms": None, "dropped_frames": 0,
-                "backend": "Ultralytics / PyTorch"}
+                "backend": "Ultralytics / PyTorch", "cpu": cpu_val, "ram": ram_val,
+                "model": model_name}
     return {
         "status": {key: state[key] for key in (
             "phone_connected", "camera_connected", "stream_connected", "gps_active", "sensors_active",

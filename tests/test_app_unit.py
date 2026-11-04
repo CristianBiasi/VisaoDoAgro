@@ -94,6 +94,9 @@ class AlertTests(IsolatedAppMixin, unittest.TestCase):
             snapshot = self.app.snapshot()
         self.assertEqual(snapshot["metrics"]["objects"], 3)
         self.assertEqual(snapshot["primary_threat"]["track_id"], 3)
+        self.assertIn("cpu", snapshot["metrics"])
+        self.assertIn("ram", snapshot["metrics"])
+        self.assertIn("model", snapshot["metrics"])
 
 
 class SettingsAndMissionTests(IsolatedAppMixin, unittest.IsolatedAsyncioTestCase):
