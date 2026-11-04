@@ -8,6 +8,10 @@ class ViewModePayload(BaseModel):
 class DemoVideoRequest(BaseModel):
     name: str
 
+class VideoControl(BaseModel):
+    action: Literal["play", "pause", "toggle", "seek", "seek_relative", "speed", "loop"]
+    value: float | bool | None = None
+
 class Detection(BaseModel):
     track_id: int
     object_class: str

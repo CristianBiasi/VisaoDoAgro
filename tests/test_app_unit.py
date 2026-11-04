@@ -205,3 +205,23 @@ class SettingsAndMissionTests(IsolatedAppMixin, unittest.IsolatedAsyncioTestCase
         for bad_name in ("../app.py", "nonexistent.mp4", "evil/path.mp4", "test.txt"):
             res = await self.app.start_demo_video(self.app.DemoVideoRequest(name=bad_name))
             self.assertEqual(res.status_code, 400)
+
+    async def test_video_control_endpoint(self):
+        self.app.local_video_processor = None
+        res = await self.app.control_video(self.app.VideoControl(action="play"))
+        self.assertEqual(res.status_code, 409)
+
+        proc = Mock()
+        proc.running = True
+        proc.playback_state.return_value = {"active": True, "paused": False}
+        self.app.local_video_processor = proc
+
+        res = await self.app.control_video(self.app.VideoControl(action="speed", value=99.0))
+        self.assertEqual(res.status_code, 422)
+
+        res = await self.app.control_video(self.app.VideoControl(action="seek", value=None))
+        self.assertEqual(res.status_code, 422)
+
+        res = await self.app.control_video(self.app.VideoControl(action="play"))
+        proc.play.assert_called_once()
+        self.assertEqual(res, {"active": True, "paused": False})

@@ -20,10 +20,10 @@ from pydantic import ValidationError
 import config
 from config import ROOT, updated_settings, PERFORMANCE_PROFILES, PROXIMITY_PRESETS
 from detector import YoloDetector
-from models import Event, SettingsPatch, Telemetry, ViewModePayload, DemoVideoRequest
+from models import Event, SettingsPatch, Telemetry, ViewModePayload, DemoVideoRequest, VideoControl
 from risk import Risk
 from database import Base, engine, SessionLocal, Missao, EventoAlerta, TelemetriaPonto, ObstaculoDetectado, Configuracao
-from local_video import LocalVideoProcessor
+from local_video import LocalVideoProcessor, ALLOWED_SPEEDS
 
 try:
     from aiortc import RTCPeerConnection, RTCSessionDescription
@@ -530,6 +530,41 @@ async def stop_video():
     state["metrics"] = {}
     add_event("Local video stopped", "INFO")
     return {"ok": True}
+
+
+@app.post("/api/video/control")
+async def control_video(payload: VideoControl):
+    global local_video_processor
+    if local_video_processor is None or not local_video_processor.running:
+        return JSONResponse(status_code=409, content={"detail": "No active local video"})
+
+    action = payload.action
+    val = payload.value
+
+    if action == "play":
+        local_video_processor.play()
+    elif action == "pause":
+        local_video_processor.pause()
+    elif action == "toggle":
+        local_video_processor.toggle()
+    elif action == "seek":
+        if val is None or isinstance(val, bool) or not isinstance(val, (int, float)):
+            return JSONResponse(status_code=422, content={"detail": "Seek requires a numeric value"})
+        local_video_processor.seek(float(val))
+    elif action == "seek_relative":
+        if val is None or isinstance(val, bool) or not isinstance(val, (int, float)):
+            return JSONResponse(status_code=422, content={"detail": "Seek_relative requires a numeric value"})
+        local_video_processor.seek_relative(float(val))
+    elif action == "speed":
+        if val is None or isinstance(val, bool) or not isinstance(val, (int, float)) or float(val) not in ALLOWED_SPEEDS:
+            return JSONResponse(status_code=422, content={"detail": f"Speed must be one of {ALLOWED_SPEEDS}"})
+        local_video_processor.set_speed(float(val))
+    elif action == "loop":
+        if val is None or not isinstance(val, bool):
+            return JSONResponse(status_code=422, content={"detail": "Loop requires a boolean value"})
+        local_video_processor.set_loop(val)
+
+    return local_video_processor.playback_state()
 
 
 @app.post("/api/offer")
