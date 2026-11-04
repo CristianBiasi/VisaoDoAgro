@@ -6,6 +6,34 @@ let alarmLevel = "";
 let alertCooldown = 2.5;
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
 
+const AI_FPS_GREEN = 10;
+const AI_FPS_YELLOW = 5;
+const LATENCY_GREEN_MS = 150;
+const LATENCY_YELLOW_MS = 400;
+
+function getFpsColorClass(fps) {
+  if (fps == null || isNaN(fps) || fps <= 0) return "";
+  if (fps >= AI_FPS_GREEN) return "hud-val-green";
+  if (fps >= AI_FPS_YELLOW) return "hud-val-yellow";
+  return "hud-val-red";
+}
+
+function getLatencyColorClass(lat) {
+  if (lat == null || isNaN(lat) || lat <= 0) return "";
+  if (lat < LATENCY_GREEN_MS) return "hud-val-green";
+  if (lat <= LATENCY_YELLOW_MS) return "hud-val-yellow";
+  return "hud-val-red";
+}
+
+let hudVisible = true;
+function toggleHud() {
+  hudVisible = !hudVisible;
+  const hud = $("#metrics-hud");
+  if (hud) hud.classList.toggle("hidden", !hudVisible);
+  const btn = $("#toggle-hud-btn");
+  if (btn) btn.classList.toggle("active", hudVisible);
+}
+
 const pt = (value) => ({
   SAFE: "SEGURO", LOW: "BAIXO", MEDIUM: "MÉDIO", HIGH: "ALTO", CRITICAL: "CRÍTICO",
   LEFT: "ESQUERDA", CENTER: "CENTRO", RIGHT: "DIREITA",
@@ -180,11 +208,61 @@ function render(state) {
   $(".video-shell").classList.toggle("connected", status.stream_connected);
   $("#stream-label").textContent = pt(status.stream_connected ? "STREAM CONNECTED" : "STREAM OFFLINE");
   $("#resolution").textContent = state.metrics.resolution;
-  $("#video-fps").textContent = state.metrics.video_fps || "--";
-  $("#ai-fps").textContent = state.metrics.ai_fps || "--";
-  $("#inference").textContent = state.metrics.inference_ms ? `${state.metrics.inference_ms} ms` : "-- ms";
-  $("#device").textContent = state.metrics.device;
-  $("#server-latency").textContent = state.metrics.server_detection_ms == null ? "-- ms" : `${state.metrics.server_detection_ms} ms`;
+  const vFps = state.metrics.video_fps;
+  const aFps = state.metrics.ai_fps;
+  const infMs = state.metrics.inference_ms;
+  const latMs = state.metrics.server_detection_ms;
+  const dev = state.metrics.device || "--";
+  const mod = (state.metrics.model || "").split("/").pop().split("\\").pop() || "--";
+  const cpu = state.metrics.cpu != null ? state.metrics.cpu : "--";
+  const ram = state.metrics.ram != null ? state.metrics.ram : "--";
+  const speed = state.playback?.speed ? `${state.playback.speed}×` : "1.0×";
+
+  $("#video-fps").textContent = vFps || "--";
+  $("#ai-fps").textContent = aFps || "--";
+  $("#inference").textContent = infMs ? `${infMs} ms` : "-- ms";
+  $("#device").textContent = dev;
+  $("#server-latency").textContent = latMs == null ? "-- ms" : `${latMs} ms`;
+
+  const stripLatency = $("#strip-latency");
+  if (stripLatency) {
+    stripLatency.textContent = (latMs != null && latMs > 0) ? `${latMs} ms` : "--";
+  }
+  const latencyDisclaimer = $("#latency-disclaimer");
+  if (latencyDisclaimer) {
+    latencyDisclaimer.style.display = state.playback?.active ? "none" : "block";
+  }
+
+  const hudVFps = $("#hud-video-fps");
+  if (hudVFps) hudVFps.textContent = vFps || "--";
+  const hudAFps = $("#hud-ai-fps");
+  if (hudAFps) {
+    hudAFps.textContent = aFps || "--";
+    hudAFps.className = getFpsColorClass(aFps);
+  }
+  const hudInf = $("#hud-inference");
+  if (hudInf) hudInf.textContent = infMs ? `${infMs}` : "--";
+  const hudLat = $("#hud-latency");
+  if (hudLat) {
+    hudLat.textContent = (latMs != null && latMs > 0) ? `${latMs}` : "--";
+    hudLat.className = getLatencyColorClass(latMs);
+  }
+  const hudDev = $("#hud-device");
+  if (hudDev) hudDev.textContent = dev;
+  const hudMod = $("#hud-model");
+  if (hudMod) hudMod.textContent = mod;
+  const hudCpu = $("#hud-cpu");
+  if (hudCpu) hudCpu.textContent = cpu;
+  const hudRam = $("#hud-ram");
+  if (hudRam) hudRam.textContent = ram;
+  const hudBadge = $("#hud-mode-badge");
+  if (hudBadge) {
+    const isAI = currentViewMode === "AI";
+    hudBadge.textContent = isAI ? "COM IA" : "SEM IA";
+    hudBadge.className = `hud-badge ${isAI ? "ai" : "raw"}`;
+  }
+  const hudSpeed = $("#hud-speed-badge");
+  if (hudSpeed) hudSpeed.textContent = speed;
   $("#frame-drops").textContent = `${state.metrics.dropped_frames || 0} frames descartados`;
   $("#result-age").textContent = state.metrics.result_age_ms == null ? "Resultado: --" : `Idade do resultado: ${state.metrics.result_age_ms} ms`;
   $("#speed").textContent = state.telemetry?.speed_kmh != null ? `${state.telemetry.speed_kmh.toFixed(1)} km/h` : "--";
@@ -455,6 +533,7 @@ async function init() {
   }
 
   $("#stop-local-video").addEventListener('click', stopLocalVideo);
+  $("#toggle-hud-btn")?.addEventListener('click', toggleHud);
 
   window.addEventListener("keydown", (e) => {
     const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
@@ -463,6 +542,9 @@ async function init() {
     }
     if (e.key === "b" || e.key === "B") {
       setViewMode(currentViewMode === "AI" ? "RAW" : "AI");
+    }
+    if (e.key === "m" || e.key === "M") {
+      toggleHud();
     }
   });
 

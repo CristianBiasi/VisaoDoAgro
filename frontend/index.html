@@ -30,11 +30,34 @@
 <h1>Mission monitor</h1>
 </div>
 <div class="view-toggle">
+<button id="toggle-hud-btn" title="Alternar HUD de Métricas (M)">📊 HUD</button>
 <button class="active">COM IA</button>
 <button>SEM IA</button>
 </div>
 </div>
 <div class="video-shell">
+<div id="metrics-hud" class="metrics-hud">
+  <div class="hud-row">
+    <span>VIDEO: <b id="hud-video-fps">--</b> FPS</span>
+    <span>IA: <b id="hud-ai-fps">--</b> FPS</span>
+  </div>
+  <div class="hud-row">
+    <span>INF: <b id="hud-inference">--</b> ms</span>
+    <span>LAT: <b id="hud-latency">--</b> ms</span>
+  </div>
+  <div class="hud-row">
+    <span>DEV: <b id="hud-device">--</b></span>
+    <span>MOD: <b id="hud-model">--</b></span>
+  </div>
+  <div class="hud-row">
+    <span>CPU: <b id="hud-cpu">--</b>%</span>
+    <span>RAM: <b id="hud-ram">--</b>%</span>
+  </div>
+  <div class="hud-row hud-mode-row">
+    <span id="hud-mode-badge" class="hud-badge ai">COM IA</span>
+    <span id="hud-speed-badge">1.0×</span>
+  </div>
+</div>
 <div class="scanline">
 </div>
 <div id="video-placeholder">
@@ -67,6 +90,10 @@
 <b id="inference">-- ms</b>
 </div>
 <div>
+<small>LATÊNCIA</small>
+<b id="strip-latency">--</b>
+</div>
+<div>
 <small>AI DEVICE</small>
 <b id="device">--</b>
 </div>
@@ -76,7 +103,7 @@
 <b id="server-latency">-- ms</b>
 <small id="frame-drops">0 frames descartados</small>
 <small id="result-age">Resultado: --</small>
-<small>Não inclui captura, rede ou exibição no celular.</small>
+<small id="latency-disclaimer">Não inclui captura, rede ou exibição no celular.</small>
 </div>
 <div class="corridor-note">
 <span class="corridor-icon">⌖</span>
