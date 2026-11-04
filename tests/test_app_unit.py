@@ -197,3 +197,11 @@ class SettingsAndMissionTests(IsolatedAppMixin, unittest.IsolatedAsyncioTestCase
         self.assertEqual(self.app.snapshot()["view_mode"], "RAW")
         self.assertIs(self.app.settings, original)
         self.assertEqual(list(self.app.state["events"]), [])
+
+    async def test_demo_videos_listing_and_rejection(self):
+        demos = await self.app.list_demo_videos()
+        self.assertIsInstance(demos, list)
+
+        for bad_name in ("../app.py", "nonexistent.mp4", "evil/path.mp4", "test.txt"):
+            res = await self.app.start_demo_video(self.app.DemoVideoRequest(name=bad_name))
+            self.assertEqual(res.status_code, 400)

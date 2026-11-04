@@ -20,7 +20,7 @@ from pydantic import ValidationError
 import config
 from config import ROOT, updated_settings, PERFORMANCE_PROFILES, PROXIMITY_PRESETS
 from detector import YoloDetector
-from models import Event, SettingsPatch, Telemetry, ViewModePayload
+from models import Event, SettingsPatch, Telemetry, ViewModePayload, DemoVideoRequest
 from risk import Risk
 from database import Base, engine, SessionLocal, Missao, EventoAlerta, TelemetriaPonto, ObstaculoDetectado, Configuracao
 from local_video import LocalVideoProcessor
@@ -426,9 +426,24 @@ async def stop_camera():
     return {"ok": True}
 
 
-@app.post("/api/video/upload")
-async def upload_video(file: UploadFile):
-    """Accept a local video file and process it server-side with OpenCV + YOLO."""
+DEMO_DIR = ROOT / "demo_videos"
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv"}
+
+
+def cleanup_old_temp_videos(temp_dir: Path, max_age_seconds: int = 3600):
+    now = time.time()
+    if not temp_dir.exists():
+        return
+    for item in temp_dir.iterdir():
+        if item.is_file() and item.name != ".gitkeep":
+            try:
+                if now - item.stat().st_mtime > max_age_seconds:
+                    item.unlink()
+            except OSError:
+                pass
+
+
+async def start_local_video(path: Path | str, source_name: str):
     global local_video_processor
     # Stop any existing stream first
     if state["pcs"]:
@@ -436,22 +451,67 @@ async def upload_video(file: UploadFile):
     if local_video_processor and local_video_processor.running:
         await local_video_processor.stop()
 
-    # Save uploaded file to a temp location
-    temp_dir = ROOT / ".tmp_videos"
-    temp_dir.mkdir(exist_ok=True)
-    temp_path = temp_dir / f"upload_{int(time.time())}.mp4"
-    with open(temp_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
-
-    # Create processor and start background task
     local_video_processor = LocalVideoProcessor(
         detector, lambda: settings, publish_result, publish_error, state["video_clients"],
         get_view_mode=get_view_mode,
     )
-    local_video_processor.start(str(temp_path))
-    add_event("Local video started", "INFO")
-    return {"ok": True, "filename": file.filename}
+    if hasattr(local_video_processor, "source_name"):
+        local_video_processor.source_name = source_name
+    local_video_processor.start(str(path))
+    add_event(f"Local video started ({source_name})", "INFO")
+    return {"ok": True, "filename": source_name}
+
+
+@app.get("/api/video/demos")
+async def list_demo_videos():
+    DEMO_DIR.mkdir(exist_ok=True)
+    demos = []
+    for item in sorted(DEMO_DIR.iterdir(), key=lambda p: p.name.lower()):
+        if item.is_file() and item.suffix.lower() in ALLOWED_VIDEO_EXTENSIONS:
+            try:
+                size_mb = round(item.stat().st_size / (1024 * 1024), 2)
+            except OSError:
+                size_mb = 0.0
+            demos.append({"name": item.name, "size_mb": size_mb})
+    return demos
+
+
+@app.post("/api/video/demo")
+async def start_demo_video(payload: DemoVideoRequest):
+    safe_name = Path(payload.name).name
+    target = (DEMO_DIR / safe_name).resolve()
+    demo_dir_resolved = DEMO_DIR.resolve()
+
+    if (
+        safe_name != payload.name
+        or not str(target).startswith(str(demo_dir_resolved))
+        or target.suffix.lower() not in ALLOWED_VIDEO_EXTENSIONS
+        or not target.is_file()
+    ):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": f"Demo video '{payload.name}' not found or invalid"}
+        )
+
+    return await start_local_video(target, safe_name)
+
+
+@app.post("/api/video/upload")
+async def upload_video(file: UploadFile):
+    """Accept a local video file and process it server-side with OpenCV + YOLO."""
+    temp_dir = ROOT / ".tmp_videos"
+    temp_dir.mkdir(exist_ok=True)
+    cleanup_old_temp_videos(temp_dir)
+    safe_filename = Path(file.filename or "video.mp4").name
+    temp_path = temp_dir / f"upload_{int(time.time())}_{safe_filename}"
+    with open(temp_path, "wb") as f:
+        while True:
+            chunk = await file.read(1 << 20)
+            if not chunk:
+                break
+            f.write(chunk)
+
+    return await start_local_video(temp_path, file.filename or temp_path.name)
 
 
 @app.post("/api/video/stop")

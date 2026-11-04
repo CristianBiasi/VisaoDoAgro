@@ -5,6 +5,9 @@ from pydantic import BaseModel, Field
 class ViewModePayload(BaseModel):
     mode: Literal["AI", "RAW"]
 
+class DemoVideoRequest(BaseModel):
+    name: str
+
 class Detection(BaseModel):
     track_id: int
     object_class: str
