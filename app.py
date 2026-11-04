@@ -20,7 +20,7 @@ from pydantic import ValidationError
 import config
 from config import ROOT, updated_settings, PERFORMANCE_PROFILES, PROXIMITY_PRESETS
 from detector import YoloDetector
-from models import Event, SettingsPatch, Telemetry
+from models import Event, SettingsPatch, Telemetry, ViewModePayload
 from risk import Risk
 from database import Base, engine, SessionLocal, Missao, EventoAlerta, TelemetriaPonto, ObstaculoDetectado, Configuracao
 from local_video import LocalVideoProcessor
@@ -44,8 +44,12 @@ state = {
     "telemetry": Telemetry(), "detections": [], "events": deque(maxlen=100),
     "ai_fps": 0.0, "inference_ms": 0.0, "video_fps": 0.0, "resolution": "UNAVAILABLE",
     "device": "UNAVAILABLE", "alert_count": 0, "pcs": set(), "last_alert": {},
-    "video_clients": set(), "metrics": {},
+    "video_clients": set(), "metrics": {}, "view_mode": "AI",
 }
+
+
+def get_view_mode() -> str:
+    return state.get("view_mode", "AI")
 SECURE = (ROOT / ".certs" / "cert.pem").exists() and (ROOT / ".certs" / "key.pem").exists()
 SCHEME = "https" if SECURE else "http"
 
@@ -219,6 +223,7 @@ def snapshot():
         )},
         "telemetry": state["telemetry"].model_dump(),
         "detections": detections, "primary_threat": primary, "events": list(state["events"]),
+        "view_mode": state.get("view_mode", "AI"),
         "metrics": {**defaults, **metrics, "resolution": state["resolution"],
                     "objects": len(detections), "alerts": state["alert_count"],
                     "mission_time": int(time.time() - state["mission_started"])},
@@ -302,6 +307,12 @@ async def patch_settings(payload: SettingsPatch):
         
     add_event("Settings updated", "INFO")
     return settings.model_dump()
+
+
+@app.post("/api/view")
+async def set_view_mode(payload: ViewModePayload):
+    state["view_mode"] = payload.mode
+    return {"mode": state["view_mode"]}
 
 
 @app.post("/api/telemetry")
@@ -426,7 +437,8 @@ async def upload_video(file: UploadFile):
 
     # Create processor and start background task
     local_video_processor = LocalVideoProcessor(
-        detector, lambda: settings, publish_result, publish_error, state["video_clients"]
+        detector, lambda: settings, publish_result, publish_error, state["video_clients"],
+        get_view_mode=get_view_mode,
     )
     local_video_processor.start(str(temp_path))
     add_event("Local video started", "INFO")
@@ -463,7 +475,8 @@ async def offer(request: Request):
     def on_track(track):
         if track.kind == "video" and pc not in tracks:
             processed = ProcessedTrack(track, detector, lambda: settings,
-                                       publish_result, publish_error, state["video_clients"])
+                                       publish_result, publish_error, state["video_clients"],
+                                       get_view_mode=get_view_mode)
             tracks[pc] = processed
             pc.addTrack(processed)
             state["phone_connected"] = state["camera_connected"] = state["stream_connected"] = True

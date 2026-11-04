@@ -73,12 +73,13 @@ class ReceivedFrame:
 
 
 class ProcessedTrack(VideoStreamTrack):
-    def __init__(self, source, detector, get_settings, on_result, on_error, video_clients):
+    def __init__(self, source, detector, get_settings, on_result, on_error, video_clients, get_view_mode=lambda: "AI"):
         super().__init__()
         self.source = source
         self.detector = detector
         self.processor = DetectionProcessor(detector)
         self.get_settings = get_settings
+        self.get_view_mode = get_view_mode
         self.on_result = on_result
         self.on_error = on_error
         self.video_clients = video_clients
@@ -172,10 +173,10 @@ class ProcessedTrack(VideoStreamTrack):
             "half_precision": self.detector.half,
         }
 
-    def _render(self, received, configuration, result, send_jpeg):
+    def _render(self, received, configuration, result, send_jpeg, view_mode="AI"):
         started = time.perf_counter()
         image = received.frame.to_ndarray(format="bgr24")
-        if result and configuration.overlay_enabled:
+        if result and configuration.overlay_enabled and view_mode == "AI":
             # A BGR AV frame may share memory with to_ndarray; never paint into inference input.
             image = image.copy()
             height, width = image.shape[:2]
@@ -204,13 +205,14 @@ class ProcessedTrack(VideoStreamTrack):
         self._start()
         received = await self.capture_slot.get()
         configuration = self.get_settings()
+        view_mode = self.get_view_mode()
         result = self.latest_result
         now = time.perf_counter()
         if configuration is not self.result_settings or (result and now - result.received_at > MAX_OVERLAY_AGE):
             result = None
         send_jpeg = bool(self.video_clients) and now - self.last_jpeg >= 1 / JPEG_FPS
         self._render_task = asyncio.create_task(asyncio.to_thread(
-            self._render, received, configuration, result, send_jpeg,
+            self._render, received, configuration, result, send_jpeg, view_mode,
         ))
         output, jpeg, self.overlay_ms, self.jpeg_ms = await asyncio.shield(self._render_task)
         self.video_rate.tick(time.perf_counter())

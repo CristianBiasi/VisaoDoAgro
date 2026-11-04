@@ -21,10 +21,11 @@ logger = logging.getLogger(__name__)
 class LocalVideoProcessor:
     """Manages background processing of a single uploaded video file."""
 
-    def __init__(self, detector, get_settings, on_result, on_error, video_clients):
+    def __init__(self, detector, get_settings, on_result, on_error, video_clients, get_view_mode=lambda: "AI"):
         self.detector = detector
         self.processor = DetectionProcessor(detector)
         self.get_settings = get_settings
+        self.get_view_mode = get_view_mode
         self.on_result = on_result
         self.on_error = on_error
         self.video_clients = video_clients
@@ -116,7 +117,7 @@ class LocalVideoProcessor:
 
                 # Render overlay and send JPEG to dashboard video clients
                 image = bgr_frame.copy()
-                if settings.overlay_enabled and result.detections:
+                if settings.overlay_enabled and self.get_view_mode() == "AI" and result.detections:
                     draw_overlay(image, result.detections, settings)
 
                 success_enc, encoded = cv2.imencode(

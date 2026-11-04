@@ -97,7 +97,42 @@ function startContinuousAlert(level) {
   alarmTimer = setInterval(() => beep(alarmLevel), interval);
 }
 
+let currentViewMode = "AI";
+
+function updateViewModeUI(mode) {
+  currentViewMode = mode;
+  const isAI = mode === "AI";
+  const buttons = document.querySelectorAll(".view-toggle button");
+  if (buttons.length >= 2) {
+    buttons[0].classList.toggle("active", isAI);
+    buttons[1].classList.toggle("active", !isAI);
+  }
+  const overlayStatus = $("#overlay-status");
+  if (overlayStatus) {
+    overlayStatus.textContent = isAI ? "ON" : "OFF";
+  }
+}
+
+async function setViewMode(mode) {
+  try {
+    const response = await fetch("/api/view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode })
+    });
+    if (response.ok) {
+      const data = await response.json();
+      updateViewModeUI(data.mode);
+    }
+  } catch (error) {
+    console.error("Erro ao alterar modo de visualizacao:", error);
+  }
+}
+
 function render(state) {
+  if (state.view_mode) {
+    updateViewModeUI(state.view_mode);
+  }
   const status = state.status;
   const labels = [["PHONE", status.phone_connected], ["CAMERA", status.camera_connected], ["STREAM", status.stream_connected], ["YOLO", state.metrics.device !== "UNAVAILABLE"], ["GPS", status.gps_active], ["SENSORS", status.sensors_active]];
   $("#system-status").innerHTML = labels.map(([name, active]) => `<span><i style="color:${active ? "var(--mint)" : "var(--red)"}">●</i>${name}</span>`).join("");
@@ -236,16 +271,11 @@ async function init() {
       $("#save-settings").disabled = false;
     }
   });
-  document.querySelectorAll(".view-toggle button").forEach((button, index) => {
-    button.onclick = async () => {
-      const response = await fetch("/api/settings", {method:"PATCH", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({values:{overlay_enabled:index === 0}})});
-      if (response.ok) {
-        fillSettings(await response.json());
-        document.querySelectorAll(".view-toggle button").forEach((item) => item.classList.toggle("active", item === button));
-      }
-    };
-  });
+  const viewButtons = document.querySelectorAll(".view-toggle button");
+  if (viewButtons.length >= 2) {
+    viewButtons[0].onclick = () => setViewMode("AI");
+    viewButtons[1].onclick = () => setViewMode("RAW");
+  }
   $("#clear-events").onclick = () => { $("#events").innerHTML = ""; };
   
   let localVideoRunning = false;
@@ -310,6 +340,15 @@ async function init() {
 
   $("#stop-local-video").addEventListener('click', stopLocalVideo);
 
+  window.addEventListener("keydown", (e) => {
+    const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
+    if (["input", "select", "textarea"].includes(activeTag) || document.querySelector("dialog[open]")) {
+      return;
+    }
+    if (e.key === "b" || e.key === "B") {
+      setViewMode(currentViewMode === "AI" ? "RAW" : "AI");
+    }
+  });
 
   poll();
 }

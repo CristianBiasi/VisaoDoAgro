@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, Field
+
+class ViewModePayload(BaseModel):
+    mode: Literal["AI", "RAW"]
 
 class Detection(BaseModel):
     track_id: int

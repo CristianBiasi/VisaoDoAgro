@@ -184,3 +184,13 @@ class SettingsAndMissionTests(IsolatedAppMixin, unittest.IsolatedAsyncioTestCase
                          (145, 45, "CONCLUIDA", 3))
         self.assertIsNone(self.app.state["mission_id"])
         self.db.commit.assert_called_once()
+
+    async def test_view_mode_does_not_mutate_settings_or_emit_events(self):
+        original = self.app.settings
+        self.app.state["events"].clear()
+        res = await self.app.set_view_mode(self.app.ViewModePayload(mode="RAW"))
+        self.assertEqual(res, {"mode": "RAW"})
+        self.assertEqual(self.app.state["view_mode"], "RAW")
+        self.assertEqual(self.app.snapshot()["view_mode"], "RAW")
+        self.assertIs(self.app.settings, original)
+        self.assertEqual(list(self.app.state["events"]), [])
