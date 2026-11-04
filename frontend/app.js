@@ -133,6 +133,13 @@ function render(state) {
   if (state.view_mode) {
     updateViewModeUI(state.view_mode);
   }
+  if (state.playback !== undefined) {
+    const isPlaybackActive = Boolean(state.playback?.active);
+    if (isPlaybackActive !== localVideoRunning) {
+      localVideoRunning = isPlaybackActive;
+      updateLocalVideoUI(localVideoRunning);
+    }
+  }
   const status = state.status;
   const labels = [["PHONE", status.phone_connected], ["CAMERA", status.camera_connected], ["STREAM", status.stream_connected], ["YOLO", state.metrics.device !== "UNAVAILABLE"], ["GPS", status.gps_active], ["SENSORS", status.sensors_active]];
   $("#system-status").innerHTML = labels.map(([name, active]) => `<span><i style="color:${active ? "var(--mint)" : "var(--red)"}">●</i>${name}</span>`).join("");
@@ -279,7 +286,87 @@ async function init() {
   $("#clear-events").onclick = () => { $("#events").innerHTML = ""; };
   
   let localVideoRunning = false;
+
+  function updateLocalVideoUI(running) {
+    const startBtn = $("#start-local-video");
+    const stopBtn = $("#stop-local-video");
+    const demoBtn = $("#start-demo-video");
+    const demoSelect = $("#demo-select");
+    if (startBtn) {
+      startBtn.style.display = running ? 'none' : 'block';
+      startBtn.disabled = !$("#local-video-file")?.files?.[0];
+      startBtn.textContent = "START VIDEO SIMULATION";
+    }
+    if (stopBtn) {
+      stopBtn.style.display = running ? 'block' : 'none';
+    }
+    if (demoBtn) {
+      demoBtn.disabled = running || !demoSelect?.value;
+    }
+  }
+
+  async function loadDemoVideos() {
+    const demoSelect = $("#demo-select");
+    const demoBtn = $("#start-demo-video");
+    const statusText = $("#demo-status-text");
+    if (!demoSelect || !demoBtn) return;
+
+    try {
+      const res = await fetch("/api/video/demos");
+      if (!res.ok) return;
+      const demos = await res.json();
+      if (demos.length > 0) {
+        demoSelect.innerHTML = demos.map(d => `<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)} (${d.size_mb} MB)</option>`).join("");
+        demoBtn.disabled = localVideoRunning;
+        if (statusText) statusText.textContent = "Selecione um vídeo da pasta demo_videos/:";
+        const localRadio = document.querySelector('input[name="video_source"][value="local"]');
+        if (localRadio && !localRadio.checked && !localVideoRunning) {
+          localRadio.checked = true;
+          localRadio.dispatchEvent(new Event('change'));
+        }
+      } else {
+        demoSelect.innerHTML = '<option value="">(Nenhum vídeo demo encontrado)</option>';
+        demoBtn.disabled = true;
+        if (statusText) statusText.textContent = "Coloque um .mp4 na pasta demo_videos/";
+      }
+    } catch (e) {
+      console.error("Falha ao carregar vídeos demo:", e);
+    }
+  }
   
+  loadDemoVideos();
+
+  $("#start-demo-video")?.addEventListener('click', async () => {
+    const name = $("#demo-select")?.value;
+    if (!name) return;
+
+    const demoBtn = $("#start-demo-video");
+    demoBtn.disabled = true;
+    demoBtn.textContent = "INICIANDO...";
+
+    try {
+      const response = await fetch("/api/video/demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Server error ${response.status}`);
+      }
+
+      localVideoRunning = true;
+      updateLocalVideoUI(true);
+    } catch (e) {
+      console.error("Falha ao iniciar vídeo demo:", e);
+      alert("Falha ao iniciar vídeo demo: " + e.message);
+      updateLocalVideoUI(false);
+    } finally {
+      demoBtn.textContent = "▶ INICIAR DEMO";
+    }
+  });
+
   document.querySelectorAll('input[name="video_source"]').forEach(radio => {
     radio.addEventListener('change', (e) => {
       const source = e.target.value;
@@ -318,24 +405,19 @@ async function init() {
       }
 
       localVideoRunning = true;
-      $("#start-local-video").style.display = 'none';
-      $("#stop-local-video").style.display = 'block';
+      updateLocalVideoUI(true);
 
     } catch (e) {
       console.error("Local video upload failed:", e);
       alert("Falha ao enviar o vídeo: " + e.message);
-      $("#start-local-video").disabled = false;
-      $("#start-local-video").textContent = "START VIDEO SIMULATION";
+      updateLocalVideoUI(false);
     }
   });
   
   async function stopLocalVideo() {
     localVideoRunning = false;
     await fetch("/api/video/stop", {method: "POST"}).catch(() => {});
-    $("#start-local-video").style.display = 'block';
-    $("#start-local-video").disabled = false;
-    $("#start-local-video").textContent = "START VIDEO SIMULATION";
-    $("#stop-local-video").style.display = 'none';
+    updateLocalVideoUI(false);
   }
 
   $("#stop-local-video").addEventListener('click', stopLocalVideo);

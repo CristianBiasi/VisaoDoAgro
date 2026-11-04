@@ -109,11 +109,17 @@
 </div>
 
 <div id="source-local" style="display: none;">
-<h2>Upload Video</h2>
-<p>Select a local video file to simulate the camera.</p>
-<input type="file" id="local-video-file" accept="video/mp4,video/x-m4v,video/*,video/webm" style="width: 100%; margin: 8px 0; background: var(--bg); padding: 5px; color: var(--text);">
-<button id="start-local-video" class="primary" style="width: 100%; margin-top: 5px;" disabled>START VIDEO SIMULATION</button>
-<button id="stop-local-video" style="width: 100%; margin-top: 5px; display: none;">STOP VIDEO</button>
+  <div class="demo-box" style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);">
+    <h2>Vídeo Demo</h2>
+    <p id="demo-status-text" style="font-size: 12px; margin-bottom: 6px;">Selecione um vídeo da pasta <code>demo_videos/</code>:</p>
+    <select id="demo-select" style="width: 100%; margin: 6px 0; background: var(--bg); padding: 6px; color: var(--text); border: 1px solid var(--border); border-radius: 4px;"></select>
+    <button id="start-demo-video" class="primary" style="width: 100%; margin-top: 4px;" disabled>▶ INICIAR DEMO</button>
+  </div>
+  <h2>Upload Video</h2>
+  <p>Select a local video file to simulate the camera.</p>
+  <input type="file" id="local-video-file" accept="video/mp4,video/x-m4v,video/*,video/webm" style="width: 100%; margin: 8px 0; background: var(--bg); padding: 5px; color: var(--text);">
+  <button id="start-local-video" class="primary" style="width: 100%; margin-top: 5px;" disabled>START VIDEO SIMULATION</button>
+  <button id="stop-local-video" style="width: 100%; margin-top: 5px; display: none;">STOP VIDEO</button>
 </div>
 </div>
 </section>
