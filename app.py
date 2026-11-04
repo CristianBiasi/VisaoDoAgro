@@ -213,6 +213,10 @@ def snapshot():
         if (not result or active_track.result_settings is not settings
                 or time.perf_counter() - result.received_at > MAX_OVERLAY_AGE):
             detections = []
+    elif local_video_processor and local_video_processor.running:
+        metrics.update(local_video_processor.metrics())
+
+    playback_data = local_video_processor.playback_state() if (local_video_processor and local_video_processor.running) else None
     primary = max(detections, key=lambda item: (Risk[item["risk"]], item["proximity"]), default=None)
     try:
         cpu_val = round(psutil.cpu_percent(interval=None), 1)
@@ -233,6 +237,7 @@ def snapshot():
         "telemetry": state["telemetry"].model_dump(),
         "detections": detections, "primary_threat": primary, "events": list(state["events"]),
         "view_mode": state.get("view_mode", "AI"),
+        "playback": playback_data,
         "metrics": {**defaults, **metrics, "resolution": state["resolution"],
                     "objects": len(detections), "alerts": state["alert_count"],
                     "mission_time": int(time.time() - state["mission_started"])},

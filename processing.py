@@ -26,6 +26,10 @@ class DetectionProcessor:
         self._settings_key = None
         self._model_generation = None
 
+    def reset(self):
+        self.proximity.forget_missing(set())
+        self.risk.forget_missing(set())
+
     def process(self, frame, settings, received_at):
         started = time.perf_counter()
         key = (settings.model_path, settings.device, settings.half_precision,
