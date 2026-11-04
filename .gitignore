@@ -22,3 +22,7 @@ datasets/obstaculos/labels/**/*
 runs/
 models/*.pt
 .tmp_videos/
+demo_videos/*
+!demo_videos/.gitkeep
+.python_installs/
+.uv_cache/
