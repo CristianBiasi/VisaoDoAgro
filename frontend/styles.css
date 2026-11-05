@@ -74,3 +74,114 @@ dialog summary{cursor:pointer;color:var(--cyan);padding:12px 0}
 .hud-val-red {
   color: var(--red) !important;
 }
+
+.playback-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-top: none;
+  padding: 8px 14px;
+  font: 11px 'DM Mono', monospace;
+  color: var(--text);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.playback-bar[hidden] {
+  display: none !important;
+}
+.playback-buttons {
+  display: flex;
+  gap: 4px;
+}
+.playback-buttons button, .playback-extra button {
+  background: #18282e;
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+}
+.playback-buttons button:hover, .playback-extra button:hover {
+  background: #233b44;
+}
+.playback-extra button.active {
+  border-color: var(--mint);
+  color: var(--mint);
+}
+.playback-timeline-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.timeline-container {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.timeline-container input[type="range"] {
+  width: 100%;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--mint);
+  height: 6px;
+  background: var(--line);
+  border-radius: 3px;
+  position: relative;
+  z-index: 2;
+}
+.timeline-marks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.timeline-mark {
+  position: absolute;
+  top: -4px;
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateX(-50%);
+  transition: transform 0.1s;
+}
+.timeline-mark:hover {
+  transform: translateX(-50%) scaleY(1.3);
+}
+.timeline-mark.HIGH {
+  background: var(--orange);
+  box-shadow: 0 0 6px var(--orange);
+}
+.timeline-mark.CRITICAL {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+}
+.playback-time {
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+.playback-extra {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.playback-extra select {
+  background: #18282e;
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}

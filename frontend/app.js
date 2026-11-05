@@ -34,6 +34,82 @@ function toggleHud() {
   if (btn) btn.classList.toggle("active", hudVisible);
 }
 
+const SPEED_PRESETS = [0.25, 0.5, 1.0, 1.5, 2.0];
+let isSeeking = false;
+let currentPlaybackState = null;
+
+function formatTime(seconds) {
+  const s = Math.max(0, Math.floor(seconds || 0));
+  const m = Math.floor(s / 60).toString().padStart(2, "0");
+  const remS = (s % 60).toString().padStart(2, "0");
+  return `${m}:${remS}`;
+}
+
+async function sendVideoControl(action, value = null) {
+  try {
+    const res = await fetch("/api/video/control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, value }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      currentPlaybackState = data;
+      updatePlaybackUI(data);
+    }
+  } catch (err) {
+    console.error("Erro no controle de vídeo:", err);
+  }
+}
+
+function updatePlaybackUI(pb) {
+  if (!pb) return;
+  const seek = $("#playback-seek");
+  const timeLabel = $("#playback-time");
+  const toggleBtn = $("#playback-toggle");
+  const speedSel = $("#playback-speed");
+  const loopBtn = $("#playback-loop");
+  const marksContainer = $("#playback-marks");
+
+  if (!isSeeking && seek && pb.duration_s > 0) {
+    seek.value = (pb.position_s / pb.duration_s) * 100;
+  }
+  if (!isSeeking && timeLabel) {
+    timeLabel.textContent = `${formatTime(pb.position_s)} / ${formatTime(pb.duration_s)}`;
+  }
+  if (toggleBtn) {
+    toggleBtn.textContent = pb.paused ? "▶ Reproduzir" : "⏸ Pausar";
+  }
+  if (speedSel && document.activeElement !== speedSel) {
+    const spdStr = String(pb.speed);
+    speedSel.value = spdStr.includes(".") ? spdStr : spdStr + ".0";
+    if (!speedSel.value) speedSel.value = String(pb.speed);
+  }
+  if (loopBtn) {
+    loopBtn.classList.toggle("active", Boolean(pb.loop));
+  }
+  if (marksContainer && pb.duration_s > 0) {
+    marksContainer.innerHTML = "";
+    (pb.alert_marks || []).forEach(mark => {
+      const pct = (mark.t / pb.duration_s) * 100;
+      if (pct >= 0 && pct <= 100) {
+        const markEl = document.createElement("div");
+        markEl.className = `timeline-mark ${mark.risk}`;
+        markEl.style.left = `${pct}%`;
+        markEl.title = `Alerta ${mark.risk} em ${formatTime(mark.t)} (clique para ir e pausar)`;
+        markEl.onclick = (e) => {
+          e.stopPropagation();
+          const target = Math.max(0, mark.t - 1.0);
+          sendVideoControl("seek", target).then(() => {
+            sendVideoControl("pause");
+          });
+        };
+        marksContainer.appendChild(markEl);
+      }
+    });
+  }
+}
+
 const pt = (value) => ({
   SAFE: "SEGURO", LOW: "BAIXO", MEDIUM: "MÉDIO", HIGH: "ALTO", CRITICAL: "CRÍTICO",
   LEFT: "ESQUERDA", CENTER: "CENTRO", RIGHT: "DIREITA",
@@ -200,6 +276,16 @@ function render(state) {
     if (isPlaybackActive !== localVideoRunning) {
       localVideoRunning = isPlaybackActive;
       updateLocalVideoUI(localVideoRunning);
+    }
+    const pbBar = $("#playback-bar");
+    if (pbBar) {
+      if (state.playback && state.playback.active) {
+        pbBar.hidden = false;
+        currentPlaybackState = state.playback;
+        updatePlaybackUI(state.playback);
+      } else {
+        pbBar.hidden = true;
+      }
     }
   }
   const status = state.status;
@@ -535,6 +621,30 @@ async function init() {
   $("#stop-local-video").addEventListener('click', stopLocalVideo);
   $("#toggle-hud-btn")?.addEventListener('click', toggleHud);
 
+  const seekInput = $("#playback-seek");
+  if (seekInput) {
+    seekInput.addEventListener("input", (e) => {
+      isSeeking = true;
+      if (currentPlaybackState && currentPlaybackState.duration_s > 0) {
+        const pos = (parseFloat(e.target.value) / 100) * currentPlaybackState.duration_s;
+        $("#playback-time").textContent = `${formatTime(pos)} / ${formatTime(currentPlaybackState.duration_s)}`;
+      }
+    });
+    seekInput.addEventListener("change", (e) => {
+      if (currentPlaybackState && currentPlaybackState.duration_s > 0) {
+        const targetPos = (parseFloat(e.target.value) / 100) * currentPlaybackState.duration_s;
+        sendVideoControl("seek", targetPos);
+      }
+      isSeeking = false;
+    });
+  }
+
+  $("#playback-prev")?.addEventListener("click", () => sendVideoControl("seek_relative", -5.0));
+  $("#playback-next")?.addEventListener("click", () => sendVideoControl("seek_relative", 5.0));
+  $("#playback-toggle")?.addEventListener("click", () => sendVideoControl("toggle"));
+  $("#playback-speed")?.addEventListener("change", (e) => sendVideoControl("speed", parseFloat(e.target.value)));
+  $("#playback-loop")?.addEventListener("click", () => sendVideoControl("loop", !currentPlaybackState?.loop));
+
   window.addEventListener("keydown", (e) => {
     const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
     if (["input", "select", "textarea"].includes(activeTag) || document.querySelector("dialog[open]")) {
@@ -545,6 +655,43 @@ async function init() {
     }
     if (e.key === "m" || e.key === "M") {
       toggleHud();
+    }
+    if (e.code === "Space") {
+      e.preventDefault();
+      sendVideoControl("toggle");
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      sendVideoControl("seek_relative", -5.0);
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      sendVideoControl("seek_relative", 5.0);
+    }
+    if (e.key === "l" || e.key === "L") {
+      sendVideoControl("loop", !currentPlaybackState?.loop);
+    }
+    if (e.key === "f" || e.key === "F") {
+      const shell = document.querySelector(".video-shell");
+      if (shell) {
+        if (!document.fullscreenElement) {
+          shell.requestFullscreen?.().catch(() => {});
+        } else {
+          document.exitFullscreen?.().catch(() => {});
+        }
+      }
+    }
+    if (e.key === "," || e.key === "<") {
+      const spd = currentPlaybackState?.speed || 1.0;
+      const idx = SPEED_PRESETS.indexOf(spd);
+      const nextIdx = idx > 0 ? idx - 1 : 0;
+      sendVideoControl("speed", SPEED_PRESETS[nextIdx]);
+    }
+    if (e.key === "." || e.key === ">") {
+      const spd = currentPlaybackState?.speed || 1.0;
+      const idx = SPEED_PRESETS.indexOf(spd);
+      const nextIdx = idx >= 0 && idx < SPEED_PRESETS.length - 1 ? idx + 1 : SPEED_PRESETS.length - 1;
+      sendVideoControl("speed", SPEED_PRESETS[nextIdx]);
     }
   });
 
