@@ -102,6 +102,57 @@ Além da câmera ao vivo via WebRTC, o dashboard permite enviar arquivos de víd
 - O envio de um vídeo encerra automaticamente qualquer stream de câmera ativo (e vice-versa), evitando conflito de IDs de rastreamento.
 - O processamento pode ser interrompido a qualquer momento via `POST /api/video/stop`.
 
+## Processar vídeo offline (GPU)
+
+Para processar vídeos gravados de inspeção de torres e linhas de transmissão em alta qualidade, sem interface web e com taxa constante de 30 FPS, utilize o script `processar_video.py` ou o executável em lote `processar_video.bat`.
+
+### Pré-requisitos e Aceleração por GPU (CUDA)
+
+1. **Driver NVIDIA:** Certifique-se de que o driver NVIDIA esteja instalado e atualizado executando `nvidia-smi` no terminal.
+2. **PyTorch com CUDA:** Para usar a GPU (ex.: NVIDIA GeForce RTX), instale o PyTorch com suporte a CUDA configurado no `pyproject.toml` ou com:
+   ```powershell
+   .\.venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+   ```
+   Validação do CUDA:
+   ```powershell
+   .\.venv\Scripts\python.exe -c "import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'Sem CUDA')"
+   ```
+   *Nota: Caso o CUDA não esteja disponível, o script executa automaticamente em CPU com aviso informativo.*
+
+### Como Executar
+
+- **Via duplo clique (Interface amigável):**
+  Dê um duplo clique em `processar_video.bat`. O script abrirá uma janela nativa do Windows para você selecionar o vídeo de entrada. Ao finalizar o processamento com barra de progresso no terminal, abrirá a janela "Salvar como" para escolher onde salvar o vídeo resultante.
+- **Via Linha de Comando (CLI para automação):**
+  ```powershell
+  # Processamento com caminhos definidos
+  .\.venv\Scripts\python.exe processar_video.py --input caminho/video.mp4 --output caminho/resultado.mp4
+
+  # Ajustando parâmetros (exemplo: inferência 640px, threshold 0.40)
+  .\.venv\Scripts\python.exe processar_video.py --input video.mp4 --output saida.mp4 --conf 0.40 --batch 8
+  ```
+
+### Gerenciamento e Limites de Recursos
+
+O script foi projetado para rodar em segundo plano sem travar o computador nem esgotar a memória:
+- **CPU (~50%):** O script limita o uso a metade das threads lógicas da máquina (afinidade de CPU e limites OpenMP/MKL/OpenCV) e roda em prioridade de processo reduzida (`BELOW_NORMAL_PRIORITY_CLASS`).
+- **RAM (máx. 10 GB):** Filas de frames desacopladas com controle estrito de memória e monitor em segundo plano que previne estouro de RAM (OOM).
+- **Taxa Constante de 30 FPS:** O vídeo de saída é reamostrado de forma fluida para 30 FPS exatos mantendo a duração original do vídeo.
+- **Áudio Original:** O áudio é preservado sincronizado na saída (usando FFmpeg embutido via `imageio-ffmpeg`).
+
+### Relatório de Métricas (`.json`)
+
+Ao finalizar, um arquivo `<saida>.json` é gerado automaticamente com estatísticas da execução:
+- `entrada` e `saida`: caminhos dos arquivos.
+- `dispositivo`: hardware utilizado (ex.: `cuda:0 (NVIDIA RTX 2060 SUPER, FP16)` ou `cpu`).
+- `resolucao`, `fps_entrada`, `fps_saida`: especificações de vídeo.
+- `frames_processados`, `duracao_video_s`: total de quadros e duração do vídeo.
+- `tempo_processamento_s`, `velocidade_media_fps`: tempo total e velocidade média de inferência.
+- `pico_ram_gb`, `pico_vram_gb`, `cpu_media_pct`: consumo máximo de memória e média de processamento.
+- `deteccoes_por_classe`: contagem acumulada de instâncias detectadas (`Cabo`, `Torre treliçada`, etc.).
+- `frames_com_deteccao_por_classe`: total de quadros em que cada classe esteve presente.
+- `confianca_media_por_classe`: score médio de confiança das predições por classe.
+
 ## Performance profiles
 
 BALANCED é o padrão. Estes valores são limites/configurações, não FPS garantidos.

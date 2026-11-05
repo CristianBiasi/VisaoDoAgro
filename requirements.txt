@@ -10,6 +10,8 @@ onnx
 qrcode[pil]
 pydantic
 psutil
+imageio-ffmpeg>=0.6
+tqdm>=4.64.0
 
 # Required by persistent tracking; install before the first camera frame.
 lap

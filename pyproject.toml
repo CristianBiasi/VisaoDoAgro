@@ -11,6 +11,7 @@ dependencies = [
     "aiortc>=1.15.0",
     "av>=17.1.0",
     "fastapi>=0.141.1",
+    "imageio-ffmpeg>=0.6",
     "lap>=0.5.13",
     "numpy>=2.5.3",
     "onnx>=1.23.0",
@@ -24,9 +25,21 @@ dependencies = [
     "pyyaml>=6.0.3",
     "qrcode[pil]>=8.2",
     "sqlalchemy>=2.0.54",
+    "torch>=2.14.0",
+    "torchvision>=0.29.0",
+    "tqdm>=4.64.0",
     "ultralytics>=8.4.157",
     "uvicorn[standard]>=0.53.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32'" }]
+torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'win32'" }]
 
 [project.scripts]
 visaodoagro-main = "visaodoagro_main:main"

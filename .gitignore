@@ -26,3 +26,8 @@ demo_videos/*
 !demo_videos/.gitkeep
 .python_installs/
 .uv_cache/
+Ultralytics/
+.ultralytics/
+.yolo_config/
+.pytest_cache/
+.*_processando.mp4
