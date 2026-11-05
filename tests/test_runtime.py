@@ -167,7 +167,7 @@ class DetectorTests(unittest.TestCase):
             detector.detect(np.zeros((64, 64, 3)), Settings(monitored_classes=[]))
         with patch("detector.Path.is_file", return_value=False), self.assertRaises(FileNotFoundError):
             detector.detect(np.zeros((64, 64, 3)), Settings(model_path="models/missing.pt"))
-        self.assertEqual(detector.loaded_model, "yolo11n.pt")
+        self.assertEqual(detector.loaded_model, "best.pt")
         self.assertEqual(factory.call_count, 1)
 
     def test_device_selection_falls_back_without_cuda(self):

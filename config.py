@@ -27,13 +27,10 @@ class Settings(BaseModel):
     model_config = {"protected_namespaces": (), "extra": "forbid"}
 
     # Model
-    model_path: str = Field("yolo11n.pt", min_length=1)
+    model_path: str = Field("best.pt", min_length=1)
     confidence: float = Field(0.45, ge=0.05, le=0.99)
     iou: float = Field(0.45, ge=0.05, le=0.95)
-    monitored_classes: list[str] = Field(default_factory=lambda: [
-        "person", "car", "truck", "bus", "bicycle", "motorcycle",
-        "chair", "bottle", "backpack", "potted plant",
-    ])
+    monitored_classes: list[str] = Field(default_factory=list)
 
     # Performance: ceilings, not promises of achieved FPS.
     performance_profile: Literal["QUALITY", "BALANCED", "PERFORMANCE", "CUSTOM"] = "BALANCED"

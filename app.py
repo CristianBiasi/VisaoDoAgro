@@ -64,7 +64,17 @@ async def lifespan(application):
         conf = db.query(Configuracao).filter(Configuracao.id == 1).first()
         if conf:
             try:
-                config.settings = config.Settings(**conf.settings_json)
+                saved = dict(conf.settings_json or {})
+                if saved.get("model_path") == "yolo11n.pt":
+                    saved["model_path"] = "best.pt"
+                    if saved.get("monitored_classes") == [
+                        "person", "car", "truck", "bus", "bicycle", "motorcycle",
+                        "chair", "bottle", "backpack", "potted plant",
+                    ]:
+                        saved["monitored_classes"] = []
+                    conf.settings_json = saved
+                    db.commit()
+                config.settings = config.Settings(**saved)
                 global settings
                 settings = config.settings
             except Exception as e:
