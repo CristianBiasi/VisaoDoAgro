@@ -246,14 +246,38 @@ function startContinuousAlert(level) {
 }
 
 let currentViewMode = "AI";
+let localVideoRunning = false;
+
+function updateLocalVideoUI(running) {
+  const startBtn = $("#start-local-video");
+  const stopBtn = $("#stop-local-video");
+  const demoBtn = $("#start-demo-video");
+  const demoSelect = $("#demo-select");
+  const pbBar = $("#playback-bar");
+  if (startBtn) {
+    startBtn.style.display = running ? "none" : "block";
+    startBtn.disabled = !$("#local-video-file")?.files?.[0];
+    startBtn.textContent = "START VIDEO SIMULATION";
+  }
+  if (stopBtn) {
+    stopBtn.style.display = running ? "block" : "none";
+  }
+  if (demoBtn) {
+    demoBtn.disabled = running || !demoSelect?.value;
+  }
+  if (pbBar) {
+    pbBar.hidden = !running;
+  }
+}
 
 function updateViewModeUI(mode) {
   currentViewMode = mode;
   const isAI = mode === "AI";
-  const buttons = document.querySelectorAll(".view-toggle button");
-  if (buttons.length >= 2) {
-    buttons[0].classList.toggle("active", isAI);
-    buttons[1].classList.toggle("active", !isAI);
+  const aiBtn = $("#view-ai-btn");
+  const rawBtn = $("#view-raw-btn");
+  if (aiBtn && rawBtn) {
+    aiBtn.classList.toggle("active", isAI);
+    rawBtn.classList.toggle("active", !isAI);
   }
   const overlayStatus = $("#overlay-status");
   if (overlayStatus) {
@@ -486,32 +510,11 @@ async function init() {
       $("#save-settings").disabled = false;
     }
   });
-  const viewButtons = document.querySelectorAll(".view-toggle button");
-  if (viewButtons.length >= 2) {
-    viewButtons[0].onclick = () => setViewMode("AI");
-    viewButtons[1].onclick = () => setViewMode("RAW");
-  }
+  const aiBtn = $("#view-ai-btn");
+  const rawBtn = $("#view-raw-btn");
+  if (aiBtn) aiBtn.onclick = () => setViewMode("AI");
+  if (rawBtn) rawBtn.onclick = () => setViewMode("RAW");
   $("#clear-events").onclick = () => { $("#events").innerHTML = ""; };
-  
-  let localVideoRunning = false;
-
-  function updateLocalVideoUI(running) {
-    const startBtn = $("#start-local-video");
-    const stopBtn = $("#stop-local-video");
-    const demoBtn = $("#start-demo-video");
-    const demoSelect = $("#demo-select");
-    if (startBtn) {
-      startBtn.style.display = running ? 'none' : 'block';
-      startBtn.disabled = !$("#local-video-file")?.files?.[0];
-      startBtn.textContent = "START VIDEO SIMULATION";
-    }
-    if (stopBtn) {
-      stopBtn.style.display = running ? 'block' : 'none';
-    }
-    if (demoBtn) {
-      demoBtn.disabled = running || !demoSelect?.value;
-    }
-  }
 
   async function loadDemoVideos() {
     const demoSelect = $("#demo-select");
@@ -614,6 +617,8 @@ async function init() {
 
       localVideoRunning = true;
       updateLocalVideoUI(true);
+      const pbBar = $("#playback-bar");
+      if (pbBar) pbBar.hidden = false;
 
     } catch (e) {
       console.error("Local video upload failed:", e);

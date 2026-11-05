@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AgroSafe Vision</title>
-<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/styles.css?v=2">
 </head>
 <body>
 <header class="topbar">
@@ -30,9 +30,9 @@
 <h1>Mission monitor</h1>
 </div>
 <div class="view-toggle">
-<button id="toggle-hud-btn" title="Alternar HUD de Métricas (M)">📊 HUD</button>
-<button class="active">COM IA</button>
-<button>SEM IA</button>
+<button id="toggle-hud-btn" class="active" title="Alternar HUD de Métricas (M)">📊 HUD</button>
+<button id="view-ai-btn" class="active">COM IA</button>
+<button id="view-raw-btn">SEM IA</button>
 </div>
 </div>
 <div class="video-shell">
@@ -356,7 +356,7 @@
   <button id="save-settings" type="submit" class="primary">APLICAR AGORA</button>
 </form>
 </dialog>
-<script src="/static/app.js">
+<script src="/static/app.js?v=2">
 </script>
 </body>
 </html>
