@@ -89,6 +89,10 @@ function updatePlaybackUI(pb) {
     loopBtn.classList.toggle("active", Boolean(pb.loop));
   }
   if (marksContainer && pb.duration_s > 0) {
+    // Rebuild only when marks change; rebuilding on every poll breaks clicks.
+    const signature = `${pb.duration_s}|${(pb.alert_marks || []).map(m => `${m.t}:${m.risk}`).join(",")}`;
+    if (marksContainer.dataset.signature === signature) return;
+    marksContainer.dataset.signature = signature;
     marksContainer.innerHTML = "";
     (pb.alert_marks || []).forEach(mark => {
       const pct = (mark.t / pb.duration_s) * 100;
@@ -159,8 +163,11 @@ function connectProcessedVideo() {
   const ctx = canvas.getContext("2d", { alpha: false });
   let pendingBlob = null;
   let isDecoding = false;
+  let socketOpen = true;
 
   function renderLoop() {
+    // Stop this loop once its socket closes; reconnect starts a fresh one.
+    if (!socketOpen) return;
     if (pendingBlob && !isDecoding) {
       const blobToRender = pendingBlob;
       pendingBlob = null;
@@ -194,7 +201,10 @@ function connectProcessedVideo() {
   socket.onmessage = (event) => {
     pendingBlob = event.data;
   };
-  socket.onclose = () => setTimeout(connectProcessedVideo, 1500);
+  socket.onclose = () => {
+    socketOpen = false;
+    setTimeout(connectProcessedVideo, 1500);
+  };
 }
 
 function riskClass(risk) { return (risk || "SAFE").toLowerCase(); }

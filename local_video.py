@@ -220,19 +220,31 @@ class LocalVideoProcessor:
             logger.exception("Local video inference loop error")
 
     async def _render_and_publish(self, bgr_frame: np.ndarray):
-        """Render overlay (if active and fresh) and publish scaled JPEG to clients."""
-        started = time.perf_counter()
+        """Render overlay and publish the JPEG; CPU work runs off the event loop."""
         settings = self.get_settings()
         view_mode = self.get_view_mode()
         result = self.latest_result
 
-        # Invalidate old result based on age or frame difference
+        # Invalidate old result based on age or frame difference. While paused the
+        # result is intentionally kept: it belongs to the frame still on screen.
         if result:
             now = time.perf_counter()
             diff_frames = abs(self.frame_index - (self.latest_result_frame_index or 0))
-            if (now - result.received_at > MAX_OVERLAY_AGE) or (diff_frames > self.video_fps * 1.0):
+            too_old = not self.paused and now - result.received_at > MAX_OVERLAY_AGE
+            if too_old or diff_frames > self.video_fps * 1.0:
                 result = None
 
+        jpeg_bytes, self.overlay_ms, self.jpeg_ms = await asyncio.to_thread(
+            self._render_jpeg, bgr_frame, settings, view_mode, result,
+        )
+        if jpeg_bytes:
+            for slot in tuple(self.video_clients):
+                slot.put(jpeg_bytes)
+        self.video_rate.tick(time.perf_counter())
+
+    @staticmethod
+    def _render_jpeg(bgr_frame, settings, view_mode, result):
+        started = time.perf_counter()
         if result and settings.overlay_enabled and view_mode == "AI":
             image = bgr_frame.copy()
             height, width = image.shape[:2]
@@ -246,7 +258,7 @@ class LocalVideoProcessor:
         else:
             image = bgr_frame
 
-        self.overlay_ms = (time.perf_counter() - started) * 1000
+        overlay_ms = (time.perf_counter() - started) * 1000
 
         # Downscale JPEG if width exceeds MAX_JPEG_WIDTH
         h, w = image.shape[:2]
@@ -256,12 +268,8 @@ class LocalVideoProcessor:
 
         t_jpeg = time.perf_counter()
         success_enc, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
-        if success_enc:
-            jpeg_bytes = encoded.tobytes()
-            for slot in tuple(self.video_clients):
-                slot.put(jpeg_bytes)
-        self.jpeg_ms = (time.perf_counter() - t_jpeg) * 1000
-        self.video_rate.tick(time.perf_counter())
+        jpeg_bytes = encoded.tobytes() if success_enc else None
+        return jpeg_bytes, overlay_ms, (time.perf_counter() - t_jpeg) * 1000
 
     async def _playback(self, video_path: str):
         """Playback loop: reads frames, paces via clock, handles seek/pause/loop."""
@@ -332,7 +340,8 @@ class LocalVideoProcessor:
                 frame_start = time.perf_counter()
                 success, bgr_frame = await asyncio.to_thread(cap.read)
                 if not success:
-                    if self.loop:
+                    # A video that cannot yield any frame must not rewind forever.
+                    if self.loop and self.frame_index > 0:
                         await asyncio.to_thread(cap.set, cv2.CAP_PROP_POS_FRAMES, 0)
                         self.frame_index = 0
                         clock_time = time.perf_counter()

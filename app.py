@@ -489,7 +489,7 @@ async def start_demo_video(payload: DemoVideoRequest):
 
     if (
         safe_name != payload.name
-        or not str(target).startswith(str(demo_dir_resolved))
+        or not target.is_relative_to(demo_dir_resolved)
         or target.suffix.lower() not in ALLOWED_VIDEO_EXTENSIONS
         or not target.is_file()
     ):
